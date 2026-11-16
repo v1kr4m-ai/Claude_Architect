@@ -7,7 +7,7 @@ description: Run the local Architectural Studio engine (this repository). Use wh
 
 Engine lives in this repository's folder. Run every command from there. Read its `README.md` for the full command list and `IMPLEMENTATION_PLAN.md` for what is built.
 
-## What works today (Phases 1-2, plus imports and model choice)
+## What works today (Phases 1-3, plus imports and model choice)
 
 ```bash
 python -m studio_core status                      # GPU, Blender, ComfyUI, models
@@ -21,6 +21,8 @@ python -m studio_core approve <slug> P001 --concept N          # USER action onl
 python -m studio_core import-plan <slug> <file> [--width-m W]  # existing DXF/IFC/plan image/PDF/GLB/FBX/OBJ/STL/USD/.blend
 python -m studio_core imports <slug>
 python -m studio_core approve-import <slug> I001               # USER action only: replaces model geometry
+python -m studio_core generate-plan <slug>                     # Phase 3: floor plan proposal + preview drawings
+python -m studio_core draw <slug>                              # approved geometry -> plans/plan_L*.svg|pdf + area_schedule.csv
 python -m studio_core models                                   # which model does which task
 python -m studio_core use <task> <model|auto>                  # USER choice: pin a model
 ```
@@ -33,7 +35,7 @@ Output to read and summarise for the user: `projects/<slug>/analysis/reference_a
 
 ## What does NOT exist yet
 
-2D plan generation (Phase 3), spec-driven Blender model (Phase 4), renders / ComfyUI enhancement / video (Phase 5). If asked for these, say so plainly and offer the next phase. Never describe a plan, model, render or video as produced unless the file exists and `validate` passes.
+Spec-driven Blender model (Phase 4), renders / ComfyUI enhancement / video (Phase 5). If asked for these, say so plainly and offer the next phase. Never describe a plan, model, render or video as produced unless the file exists and `validate` passes.
 
 ## Rules
 

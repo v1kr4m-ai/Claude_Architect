@@ -51,6 +51,8 @@ select{font:inherit;border:1px solid var(--line);background:var(--panel);color:v
 .prow{display:block;width:100%;text-align:left;margin-bottom:6px;white-space:normal;overflow-wrap:anywhere}.prow.sel{border-color:var(--accent)}
 .concept{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--bg)}
 .warnitem{color:var(--warn)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.plan-img{display:block;width:100%;max-width:900px;height:auto;background:#fff;border:1px solid var(--line);border-radius:4px}
 @media (max-width:760px){.pill{white-space:normal}.layout{grid-template-columns:minmax(0,1fr);padding:12px}dl{grid-template-columns:1fr}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
 </style>
 </head>
@@ -93,7 +95,7 @@ async function api(path, opts) {
   return r.json();
 }
 
-let slug = null, activeRef = null;
+let slug = null, activeRef = null, pendingIid = null;
 
 async function loadStatus() {
   const box = $("st"); box.replaceChildren();
@@ -134,13 +136,14 @@ async function loadProject() {
   if (!slug) { main.append(el("p", { class: "empty" }, "Select a project.")); return; }
   const refSec = section("References"), detail = el("div", { id: "detail" }),
     propSec = section("Brief proposals"), propDetail = el("div"),
-    impSec = section("Plan & model imports"), impDetail = el("div"),
+    impSec = section("Plans & imports"), impDetail = el("div"),
+    drawSec = section("Drawings (approved)"),
     decSec = section("Decisions"), revSec = section("Revision history"),
     valSec = section("Validation", el("button", { on: { click: () => validate(valBox) } }, "Validate"));
   const valBox = el("div", { id: "valbox" }); valSec.append(valBox);
-  main.append(el("h2", null, slug), refSec, detail, propSec, impSec, decSec, revSec, valSec);
+  main.append(el("h2", null, slug), refSec, detail, propSec, impSec, drawSec, decSec, revSec, valSec);
   const mySlug = slug;
-  await Promise.all([renderRefs(refSec, mySlug), renderProposals(propSec, propDetail, mySlug), renderImports(impSec, impDetail, mySlug), renderDecisions(decSec, mySlug), renderRevs(revSec, mySlug)]);
+  await Promise.all([renderRefs(refSec, mySlug), renderProposals(propSec, propDetail, mySlug), renderImports(impSec, impDetail, mySlug), renderDrawings(drawSec, mySlug), renderDecisions(decSec, mySlug), renderRevs(revSec, mySlug)]);
 }
 
 async function renderRefs(sec, s) {
@@ -311,9 +314,26 @@ async function renderProposals(sec, det, s) {
 }
 
 async function renderImports(sec, det, s) {
-  const base = `/projects/${encodeURIComponent(s)}/imports`;
+  const base = `/projects/${encodeURIComponent(s)}/imports`, pbase = `/projects/${encodeURIComponent(s)}/plans`;
   const reload = () => loadProject();
   const fail = (e) => det.prepend(errBox(e.message));
+  const fileUrl = (p) => `/projects/${encodeURIComponent(s)}/files/${enc(p)}`;
+  const rows = {}, msg = el("div");
+  const postOpts = { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" };
+  const action = (label, cls, run) => {
+    const btn = el("button", { class: cls }, label);
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Working…"; msg.replaceChildren();
+      try { await run(); } catch (e) { msg.replaceChildren(errBox(e.message)); btn.disabled = false; btn.textContent = label; }
+    });
+    return btn;
+  };
+  sec.append(el("div", { class: "actions" },
+    action("Generate floor plan from approved brief", "primary", async () => {
+      const rec = await api(`${pbase}/generate`, postOpts);
+      pendingIid = rec.id || null; await loadProject();
+    }),
+    action("Draw approved plans", "", async () => { await api(`${pbase}/draw`, postOpts); await loadProject(); })), msg);
   const scls = (st) => st === "approved" ? "ok" : st === "rejected" ? "bad" : "warn";
   const extent = (x) => Array.isArray(x) && x.length ? x.join(" × ") + " m" : null;
   const sumLine = (m) => [m.levels != null && `${m.levels} levels`, m.walls != null && `${m.walls} walls`,
@@ -340,6 +360,16 @@ async function renderImports(sec, det, s) {
         try { await api(`${base}/${encodeURIComponent(iid)}/reject`, { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reason }) }); reload(); } catch (e) { fail(e); }
       } } }, "Reject"));
+      const prevs = r.previews || [];
+      if (prevs.length) {
+        det.append(el("h3", null, "Previews"));
+        for (const svg of prevs.filter((p) => p.endsWith(".svg"))) {
+          const pdf = svg.replace(/\.svg$/, ".pdf");
+          det.append(el("p", { class: "note" }, "Preview — not approved"),
+            el("img", { class: "plan-img", loading: "lazy", src: fileUrl(svg), alt: svg.split("/").pop() }),
+            prevs.includes(pdf) ? el("p", null, el("a", { href: fileUrl(pdf), target: "_blank", rel: "noopener" }, "Open PDF (" + pdf.split("/").pop() + ")")) : null);
+        }
+      }
       det.append(el("h3", null, "Notes"), list(r.notes));
       det.append(el("h3", null, "Warnings"), (r.warnings || []).length
         ? el("ul", { class: "plain" }, r.warnings.map((w) => el("li", { class: "warnitem" }, w))) : el("p", { class: "empty" }, "No problems found"));
@@ -367,9 +397,38 @@ async function renderImports(sec, det, s) {
       const b = el("button", { class: "prow" }, badge(show(i.status), scls(i.status)),
         el("strong", null, i.id), ` · ${show(i.format)} · ${show(i.file)} — ${sumLine(i.summary || {})} · ${i.warnings} warning(s)`);
       b.addEventListener("click", () => open(i.id, b));
-      sec.append(b);
+      rows[i.id] = b; sec.append(b);
     }
     sec.append(det);
+    if (pendingIid && rows[pendingIid]) rows[pendingIid].click();
+    pendingIid = null;
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function renderDrawings(sec, s) {
+  try {
+    const arts = ((await api(`/projects/${encodeURIComponent(s)}/state/artifacts.json`)).artifacts || [])
+      .filter((a) => a.authoritative && String(a.kind || "").startsWith("plan_"));
+    const levels = new Map(); let csv = null;
+    for (const a of arts) {
+      if (a.kind === "plan_csv") { csv = a; continue; }
+      const m = /plan_(L\d+)\.(svg|pdf)$/i.exec(a.path || "");
+      if (!m) continue;
+      if (!levels.has(m[1])) levels.set(m[1], {});
+      levels.get(m[1])[m[2].toLowerCase()] = a;
+    }
+    if (!levels.size && !csv) { sec.append(el("p", { class: "empty" }, "No approved drawings yet. Generate a plan, approve it, then Draw.")); return; }
+    const fileUrl = (p) => `/projects/${encodeURIComponent(s)}/files/${enc(p)}`;
+    const ids = [...levels.keys()].sort((x, y) => Number(x.slice(1)) - Number(y.slice(1)));
+    for (const lv of ids) {
+      const { svg, pdf } = levels.get(lv), rev = (svg || pdf).revision;
+      sec.append(el("div", { class: "group" },
+        el("h3", null, `${lv}` + (rev != null ? ` · revision ${rev}` : "")),
+        svg ? el("img", { class: "plan-img", loading: "lazy", src: fileUrl(svg.path), alt: `${lv} floor plan` })
+          : el("p", { class: "empty" }, "No SVG for this level."),
+        pdf ? el("p", null, el("a", { href: fileUrl(pdf.path), target: "_blank", rel: "noopener" }, "Open PDF (" + pdf.path.split("/").pop() + ")")) : null));
+    }
+    if (csv) sec.append(el("p", null, el("a", { href: fileUrl(csv.path), target: "_blank", rel: "noopener" }, "area_schedule.csv")));
   } catch (e) { sec.append(errBox(e.message)); }
 }
 

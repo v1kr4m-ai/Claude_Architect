@@ -9,7 +9,7 @@ import time
 import urllib.request
 import webbrowser
 
-from . import brief, config, imports, ingest, projects, providers, router, status, vision
+from . import brief, config, imports, ingest, layout, projects, providers, router, status, vision
 
 
 def _exit_with_parent() -> None:
@@ -67,6 +67,10 @@ def main(argv=None) -> int:
     s.add_argument("--unit-scale", type=float, help="3D model: metres per file unit (FBX/OBJ/STL)")
     s.add_argument("--model", help="plan image: vision model for this run")
     s = sub.add_parser("imports", help="list plan/model imports"); s.add_argument("project")
+    s = sub.add_parser("generate-plan", help="lay out a floor plan from the approved brief (as a proposal)")
+    s.add_argument("project")
+    s = sub.add_parser("draw", help="draw the approved model as SVG/PDF plan sheets + area schedule")
+    s.add_argument("project")
     s = sub.add_parser("approve-import", help="adopt an import into model_spec.json (user action)")
     s.add_argument("project"); s.add_argument("import_id")
     s = sub.add_parser("reject-import", help="reject an import")
@@ -128,6 +132,11 @@ def main(argv=None) -> int:
             rec = imports.import_file(a.project, a.file, width_m=a.width_m, storey_height_m=a.storey_height_m,
                                       unit_scale=a.unit_scale, vision_model=a.model)
             out = {k: rec[k] for k in ("id", "status", "format", "summary", "warnings", "notes")}
+        elif a.cmd == "generate-plan":
+            rec = layout.propose(a.project)
+            out = {k: rec[k] for k in ("id", "status", "summary", "warnings", "notes", "previews")}
+        elif a.cmd == "draw":
+            out = layout.draw(a.project)
         elif a.cmd == "imports":
             out = imports.list_imports(a.project)
         elif a.cmd == "approve-import":

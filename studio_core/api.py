@@ -5,9 +5,9 @@ from pathlib import Path
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import brief, imports, ingest, projects, providers, router, status, vision
+from . import brief, imports, ingest, layout, projects, providers, router, status, vision
 
-app = FastAPI(title="Architectural Studio Core", version="0.4.0")
+app = FastAPI(title="Architectural Studio Core", version="0.5.0")
 
 
 @app.exception_handler(projects.StudioError)
@@ -53,7 +53,8 @@ def project_file(slug: str, path: str):
     """Read-only; only thumbnails, originals and analysis JSON. Never state files or backups."""
     pdir = projects.project_dir(slug).resolve()
     target = (pdir / path).resolve()
-    allowed = (pdir / "references" / "thumbnails", pdir / "analysis", pdir / "references" / "originals")
+    allowed = (pdir / "references" / "thumbnails", pdir / "analysis", pdir / "references" / "originals",
+               pdir / "plans")  # drawings: approved sheets and proposal previews
     if not (any(target.is_relative_to(a) for a in allowed) and target.is_file()):
         raise HTTPException(404, "File not found")
     return FileResponse(target)
@@ -201,6 +202,16 @@ def approve_import(slug: str, iid: str):
 @app.post("/projects/{slug}/imports/{iid}/reject")
 def reject_import(slug: str, iid: str, req: Reject):
     return imports.reject(slug, iid, req.reason)
+
+
+@app.post("/projects/{slug}/plans/generate", status_code=201)
+def generate_plan(slug: str):
+    return layout.propose(slug)
+
+
+@app.post("/projects/{slug}/plans/draw")
+def draw_plan(slug: str):
+    return layout.draw(slug)
 
 
 @app.post("/projects/{slug}/validate")

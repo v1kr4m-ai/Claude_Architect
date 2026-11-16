@@ -219,7 +219,10 @@ def set_decision_status(slug: str, did: str, status: str, author: str = "user") 
     return found
 
 
-def add_artifact(slug: str, kind: str, path: Path, author: str, authoritative: bool, note: str = "") -> dict:
+def add_artifact(slug: str, kind: str, path: Path, author: str, authoritative: bool, note: str = "",
+                 source_revision: int | None = None) -> dict:
+    """source_revision: the project revision the artifact was derived from (e.g. the spec a drawing
+    was drawn from). Defaults to the revision this registration creates."""
     p = project_dir(slug)
     if not path.exists() or path.stat().st_size == 0:
         raise StudioError(f"Artifact missing or empty: {path}")
@@ -228,7 +231,7 @@ def add_artifact(slug: str, kind: str, path: Path, author: str, authoritative: b
     def fn(d):
         entry.update(kind=kind, path=path.relative_to(p).as_posix(), bytes=path.stat().st_size,
                      authoritative=authoritative, author=author, note=note, at=now(),
-                     revision=read_state(slug, "project.json")["revision"] + 1)
+                     revision=source_revision or read_state(slug, "project.json")["revision"] + 1)
         d["artifacts"] = [a for a in d["artifacts"] if a["path"] != entry["path"]] + [entry]
 
     update_state(slug, "artifacts.json", fn, author, f"artifact: {kind}")
@@ -270,9 +273,13 @@ def validate(slug: str) -> dict:
     for ref in state.get("reference_manifest.json", {}).get("references", []):
         if not (p / ref["original"]).exists():
             problems.append(f"reference {ref['id']}: original file missing")
+    spec_rev = max((r["revision"] for r in state.get("revision_history.json", {}).get("revisions", [])
+                    if r.get("file") == "model_spec.json"), default=0)
     for art in state.get("artifacts.json", {}).get("artifacts", []):
         f = p / art["path"]
         if not f.exists() or f.stat().st_size == 0:
             problems.append(f"artifact missing or empty: {art['path']}")
+        elif art.get("authoritative") and art["kind"] in ("plan_svg", "plan_pdf", "plan_csv") and art.get("revision", 0) < spec_rev:
+            problems.append(f"{art['path']} was drawn from r{art['revision']} but the model changed in r{spec_rev}: run draw again")
     return {"valid": not problems, "problems": problems,
             "revision": state.get("project.json", {}).get("revision")}

@@ -35,28 +35,53 @@ def import_file(slug: str, source: str, author: str = "user", **opts) -> dict:
         raise StudioError(f"Unsupported plan/model format: {src.suffix}. Supported: {', '.join(sorted(FORMATS))}")
     p = projects.project_dir(slug)
     (p / "references" / "plans").mkdir(parents=True, exist_ok=True)
-    idir = p / "imports"
-    idir.mkdir(exist_ok=True)
-    with projects.lock(slug):
-        iid = f"I{len(list(idir.glob('I*.json'))) + 1:03d}"
-        kept = p / "references" / "plans" / f"{iid}{src.suffix.lower()}"
-        shutil.copy2(src, kept)
+    iid = new_id(slug)
+    kept = p / "references" / "plans" / f"{iid}{src.suffix.lower()}"
+    shutil.copy2(src, kept)
     try:
         geo, notes = _importer(fmt).run(kept, **opts)
         geo = geometry.SpecGeometry.model_validate(geo.model_dump())  # re-validate whatever came back
     except StudioError:
         kept.unlink(missing_ok=True)
+        (p / "imports" / f"{iid}.json").unlink(missing_ok=True)
         raise
     except Exception as e:  # importer bug or unreadable file: keep the project clean
         kept.unlink(missing_ok=True)
+        (p / "imports" / f"{iid}.json").unlink(missing_ok=True)
         raise StudioError(f"{fmt} import failed: {type(e).__name__}: {e}") from e
     geo.source.update(file=kept.relative_to(p).as_posix(), original_name=src.name, format=fmt)
+    return save(slug, iid, geo, fmt, notes, author, options={k: v for k, v in opts.items() if v is not None})
+
+
+def new_id(slug: str) -> str:
+    idir = projects.project_dir(slug) / "imports"
+    idir.mkdir(exist_ok=True)
+    with projects.lock(slug):
+        iid = f"I{len(list(idir.glob('I*.json'))) + 1:03d}"
+        (idir / f"{iid}.json").write_text("{}", encoding="utf-8")  # reserve the id
+    return iid
+
+
+def save(slug: str, iid: str, geo: geometry.SpecGeometry, fmt: str, notes: list[str], author: str,
+         options: dict | None = None, extra_warnings: list[str] = ()) -> dict:
+    """Store geometry as a reviewable proposal and draw preview sheets of it."""
+    p = projects.project_dir(slug)
     checked = geometry.check(geo)
+    checked["warnings"] += list(extra_warnings)
     rec = {"id": iid, "status": "proposed", "created": projects.now(), "author": author,
-           "format": fmt, "options": {k: v for k, v in opts.items() if v is not None},
-           "notes": notes, **checked, "geometry": geo.model_dump()}
-    (idir / f"{iid}.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False), encoding="utf-8")
-    projects.add_artifact(slug, "plan_import", idir / f"{iid}.json", author, authoritative=False)
+           "format": fmt, "options": options or {}, "notes": notes, **checked, "geometry": geo.model_dump()}
+    try:
+        from . import drawing
+        name = projects.read_state(slug, "project.json")["name"]
+        files = drawing.render(geo, p / "plans" / "preview" / iid,
+                               {"project": name, "status": f"PROPOSAL {iid} - NOT APPROVED",
+                                "source": geo.source.get("original_name") or fmt})
+        rec["previews"] = [f.relative_to(p).as_posix() for f in files]
+    except StudioError as e:          # e.g. nothing locatable to draw (photo import without scale)
+        rec["previews"] = []
+        rec["notes"] = rec["notes"] + [f"no preview drawing: {e}"]
+    (p / "imports" / f"{iid}.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False), encoding="utf-8")
+    projects.add_artifact(slug, "plan_import", p / "imports" / f"{iid}.json", author, authoritative=False)
     return rec
 
 
@@ -74,6 +99,8 @@ def list_imports(slug: str) -> list[dict]:
     out = []
     for f in sorted(d.glob("I*.json")) if d.exists() else []:
         r = json.loads(f.read_text(encoding="utf-8"))
+        if "id" not in r:
+            continue  # id reserved by an import still running
         out.append({k: r[k] for k in ("id", "status", "created", "format")} |
                    {"file": r["geometry"]["source"].get("original_name"), "summary": r["summary"],
                     "warnings": len(r["warnings"])})

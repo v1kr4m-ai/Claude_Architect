@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-11-16 — Phase 3: floor plans
+
+- `layout.py`: approved brief → floor plan. Double-loaded corridor: one footprint sized from the largest floor and the plot's proportions, 1.2 m central corridor with the front door at its south end, a column of rooms each side so every room opens onto circulation, the stair stacked in the same place on every floor, rooms split between columns by area and ordered by a small swap search so linked rooms sit side by side and public rooms face the front. Walls merged from room edges (0.23 m exterior, 0.115 m interior), doors (en-suite bathrooms and wardrobes open from their single bedroom; shared ones from the corridor), windows on outside walls (small high windows for wet rooms).
+- Plan checks: rule-of-thumb minimum widths, long thin rooms, drawn vs scheduled area, missing doors, rooms reached only through another room, adjacency not achieved or only across the corridor.
+- `drawing.py` (Sonnet subagent, reviewed): A3 sheets per floor, scale chosen to fit (1:50-1:500), walls with real thickness and openings cut, door swings, windows, dimension chains, room labels (floor prefix dropped, wrapped), area schedule, legend, north arrow, title block, "verify on site" note; vector SVG + PDF via matplotlib, no new dependency. Draws imported plans too.
+- Generated plans reuse the import review flow (`imports/I###`, preview drawings in `plans/preview/`); `draw` renders the approved geometry to `plans/` as authoritative artifacts plus `area_schedule.csv`.
+- CLI `generate-plan`, `draw`; REST `/plans/generate`, `/plans/draw`; MCP `generate_plan`, `draw_plans`; file endpoint serves `plans/`.
+- Live first-version layout (side hall + treemap) left 5 rooms reachable only through other rooms; replaced by the corridor layout before release. Live sheet review caught "Sheet 1 of (-1.0, 0.0)" (variable reuse), unlabelled large rooms, a wardrobe opening onto the landing and a shared bathroom opening into one bedroom; all fixed with regression tests.
+
 ## 0.4.0 — 2026-11-16 — Import existing work; model selection
 
 - `geometry.py`: authoritative geometry schema for `model_spec.json` (levels, spaces with polygons, walls with thickness, openings; provenance per element) and deterministic checks (overlaps, tiny rooms, unknown thicknesses, implausible units).

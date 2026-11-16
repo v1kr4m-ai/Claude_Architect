@@ -5,7 +5,7 @@ Calls the Python layer directly, so the REST service does not need to be running
 """
 from mcp.server.fastmcp import FastMCP
 
-from . import brief, imports, ingest, projects, router, status, vision
+from . import brief, imports, ingest, layout, projects, router, status, vision
 
 mcp = FastMCP("architectural-studio")
 
@@ -98,6 +98,20 @@ def import_plan(project: str, path: str, width_m: float = 0, storey_height_m: fl
 def list_plan_imports(project: str) -> list[dict]:
     """List plan/model imports with status."""
     return imports.list_imports(project)
+
+
+@mcp.tool()
+def generate_plan(project: str) -> dict:
+    """Lay out a floor plan from the approved brief. Saved as a proposal (imports/I###) with preview
+    drawings and check warnings; only the user can approve it into the model."""
+    rec = layout.propose(project, author="agent")
+    return {k: rec[k] for k in ("id", "summary", "warnings", "notes", "previews")}
+
+
+@mcp.tool()
+def draw_plans(project: str) -> dict:
+    """Draw the approved model geometry as SVG/PDF sheets plus an area schedule CSV in plans/."""
+    return layout.draw(project)
 
 
 @mcp.tool()
