@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architectural Studio</title>
+<style>
+:root{--bg:#f5f4f1;--panel:#fff;--ink:#1d1f22;--muted:#6b7077;--line:#dcdad4;--accent:#b4532a;--accent-ink:#fff;
+--ok:#2f7a4d;--warn:#a86a00;--bad:#b3261e;--chip:#ecebe6}
+@media (prefers-color-scheme:dark){:root{--bg:#161718;--panel:#202224;--ink:#e8e6e1;--muted:#9a9ea5;--line:#34373b;--accent:#e08a5f;--accent-ink:#161718;
+--ok:#6cc38e;--warn:#e5b04d;--bad:#f2887f;--chip:#2b2e31}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+header h1{font-size:15px;margin:0 8px 0 0;letter-spacing:.06em;text-transform:uppercase}
+.pill{padding:2px 9px;border-radius:99px;background:var(--chip);font-size:12px;white-space:nowrap}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.bad{color:var(--bad)}
+.pill.cloudoff{background:var(--ok);color:var(--accent-ink);font-weight:600}
+.pill.cloudon{background:var(--bad);color:var(--accent-ink);font-weight:600}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:5px 12px;border-radius:6px;cursor:pointer}
+button:hover{border-color:var(--accent)}button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.spacer{flex:1}
+.layout{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px;max-width:1400px;margin:0 auto}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;align-self:start}
+aside h2,main h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:8px 8px 6px}
+.proj{display:block;width:100%;text-align:left;border:0;border-radius:6px;padding:8px;background:none}
+.proj.sel{background:var(--chip);box-shadow:inset 3px 0 var(--accent)}
+.proj small{display:block;color:var(--muted)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:16px}
+section h2{margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);font-size:12px}
+.card.click{cursor:pointer}.card.click:hover,.card.active{border-color:var(--accent)}
+.card img,.card .noimg{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--chip)}
+.card .meta{padding:6px 8px;display:flex;flex-direction:column;gap:3px}
+.badge{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;background:var(--chip);color:var(--muted);margin-right:4px}
+.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.bad{color:var(--bad)}
+.group{margin-bottom:14px}.group>h3{font-size:13px;margin:0 0 8px}
+.err{border:1px solid var(--bad);color:var(--bad);border-radius:6px;padding:8px 12px;margin:0 0 10px;background:var(--panel)}
+.note{border-left:3px solid var(--warn);padding:6px 10px;background:var(--chip);margin:8px 0;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+td.estimated{color:var(--warn);font-style:italic}td.unknown{color:var(--bad);font-weight:600}
+dl{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin:8px 0}dt{color:var(--muted)}dd{margin:0}
+details{margin-top:10px}pre{white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;font:12px/1.4 ui-monospace,Consolas,monospace}
+ul.plain{margin:0;padding-left:18px}.empty{color:var(--muted)}
+@media (max-width:760px){.layout{grid-template-columns:1fr;padding:12px}dl{grid-template-columns:1fr}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Architectural Studio</h1>
+  <span id="st" class="empty">loading status…</span>
+  <span class="spacer"></span>
+  <button id="refresh" class="primary">Refresh</button>
+</header>
+<div class="layout">
+  <aside><h2>Projects</h2><div id="plist"></div></aside>
+  <main id="main"><p class="empty">Select a project.</p></main>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v; else if (k === "on") for (const [ev, f] of Object.entries(v)) e.addEventListener(ev, f);
+    else e.setAttribute(k, v);
+  }
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+}
+const badge = (t, cls) => el("span", { class: "badge " + (cls || "") }, t);
+const errBox = (m) => el("div", { class: "err" }, m);
+const show = (v) => v == null || v === "" ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v);
+const enc = (p) => p.split("/").map(encodeURIComponent).join("/");
+
+async function api(path, opts) {
+  let r;
+  try { r = await fetch(path, opts); } catch (e) { throw new Error("API unreachable (" + path + "): " + e.message); }
+  if (!r.ok) {
+    let d = ""; try { d = (await r.json()).detail; } catch (_) {}
+    throw new Error(path + " -> HTTP " + r.status + (d ? ": " + d : ""));
+  }
+  return r.json();
+}
+
+let slug = null, activeRef = null;
+
+async function loadStatus() {
+  const box = $("st"); box.replaceChildren();
+  try {
+    const s = await api("/status");
+    const gpu = s.gpu && s.gpu.name ? `${s.gpu.name} ${s.gpu.free_mb}/${s.gpu.total_mb} MB free` : "no GPU detected";
+    const pr = Object.values(s.providers || {}).find((p) => p.available && p.models.length);
+    const ollama = s.providers && s.providers.ollama;
+    const cloud = s.privacy && s.privacy.allow_cloud;
+    box.append(
+      el("span", { class: "pill" }, "GPU: " + gpu), " ",
+      el("span", { class: "pill " + (s.blender.ok ? "ok" : "bad") }, "Blender: " + (s.blender.ok ? s.blender.version || "ok" : "not available")), " ",
+      el("span", { class: "pill " + (s.comfyui.ok ? "ok" : "warn") }, "ComfyUI: " + (s.comfyui.ok ? "ok" : "not reachable")), " ",
+      el("span", { class: "pill " + (ollama && ollama.available ? "ok" : "bad") }, "Ollama: " + (ollama && ollama.available ? ollama.models.length + " models" : "down")), " ",
+      el("span", { class: "pill " + (cloud ? "cloudon" : "cloudoff") },
+        cloud ? "WARNING: Cloud ON — data may leave this machine" : "Cloud OFF — nothing leaves this machine"));
+  } catch (e) { box.append(errBox(e.message)); }
+}
+
+async function loadProjects() {
+  const box = $("plist"); box.replaceChildren();
+  try {
+    const { projects } = await api("/projects");
+    if (!projects.length) box.append(el("p", { class: "empty" }, "No projects."));
+    for (const p of projects) {
+      box.append(el("button", { class: "proj" + (p.slug === slug ? " sel" : ""), on: { click: () => select(p.slug) } },
+        p.name, el("small", null, `rev ${p.revision} · ${p.status}`)));
+    }
+  } catch (e) { box.append(errBox(e.message)); }
+}
+
+function select(s) { slug = s; activeRef = null; loadProjects(); loadProject(); }
+
+function section(title, ...kids) { return el("section", null, el("h2", null, title), kids); }
+
+async function loadProject() {
+  const main = $("main"); main.replaceChildren();
+  if (!slug) { main.append(el("p", { class: "empty" }, "Select a project.")); return; }
+  const refSec = section("References"), detail = el("div", { id: "detail" }),
+    decSec = section("Decisions"), revSec = section("Revision history"),
+    valSec = section("Validation", el("button", { on: { click: () => validate(valBox) } }, "Validate"));
+  const valBox = el("div", { id: "valbox" }); valSec.append(valBox);
+  main.append(el("h2", null, slug), refSec, detail, decSec, revSec, valSec);
+  const mySlug = slug;
+  await Promise.all([renderRefs(refSec, mySlug), renderDecisions(decSec, mySlug), renderRevs(revSec, mySlug)]);
+}
+
+async function renderRefs(sec, s) {
+  try {
+    const refs = (await api(`/projects/${encodeURIComponent(s)}/state/reference_manifest.json`)).references || [];
+    if (!refs.length) { sec.append(el("p", { class: "empty" }, "No references imported.")); return; }
+    const card = (r) => {
+      const analysed = !!r.analysis;
+      const kids = [r.thumbnail
+        ? el("img", { loading: "lazy", alt: r.id, src: `/projects/${encodeURIComponent(s)}/files/${enc(r.thumbnail)}` })
+        : el("div", { class: "noimg" })];
+      const meta = el("div", { class: "meta" }, el("strong", null, r.id), el("span", null, `${r.kind} · ${r.source_name}`),
+        el("span", null, r.near_duplicate_of ? badge("near-duplicate of " + r.near_duplicate_of, "warn") : null,
+          badge(analysed ? "analysed" : "not analysed", analysed ? "ok" : "")));
+      const c = el("div", { class: "card" + (analysed ? " click" : ""), "data-id": r.id }, kids, meta);
+      if (analysed) c.addEventListener("click", () => openDetail(s, r, c));
+      return c;
+    };
+    const parents = refs.filter((r) => !r.parent && !r.thumbnail && (r.kind === "video" || r.kind === "pdf"));
+    const pids = new Set(parents.map((p) => p.id));
+    for (const p of parents) {
+      const kids = refs.filter((r) => r.parent === p.id);
+      sec.append(el("div", { class: "group" }, el("h3", null, `${p.id} · ${p.kind} · ${p.source_name} (${kids.length} derived)`),
+        el("div", { class: "grid" }, kids.map(card))));
+    }
+    const rest = refs.filter((r) => !pids.has(r.id) && !pids.has(r.parent));
+    if (rest.length) sec.append(el("div", { class: "grid" }, rest.map(card)));
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+function list(a) { return !a || !a.length ? "—" : el("ul", { class: "plain" }, a.map((x) => el("li", null, show(x)))); }
+
+async function openDetail(s, r, cardEl) {
+  document.querySelectorAll(".card.active").forEach((c) => c.classList.remove("active"));
+  cardEl.classList.add("active");
+  const d = $("detail"); d.replaceChildren();
+  const sec = section("Analysis · " + r.id); d.append(sec);
+  try {
+    const j = await api(`/projects/${encodeURIComponent(s)}/files/${enc(r.analysis)}`);
+    const a = j.analysis || {};
+    sec.append(el("div", { class: "note" }, "Unreviewed machine analysis — not an approved design decision."));
+    const mats = (a.materials || []).map((m) => typeof m === "object" && m ? `${show(m.name)} @ ${show(m.location)}${m.confidence ? " (" + m.confidence + ")" : ""}` : m);
+    const styles = (a.styles || []).map((x) => typeof x === "object" && x ? `${show(x.name)} (${show(x.confidence)})` : x);
+    const rows = [["Subject", a.subject], ["Image type", a.image_type], ["Storeys visible", a.storeys_visible], ["Styles", list(styles)],
+      ["Massing", a.massing], ["Roof form", a.roof_form], ["Openings", a.openings], ["Materials", list(mats)],
+      ["Features", list(a.features)], ["Landscape", a.landscape], ["Camera view", a.camera_view],
+      ["Uncertainties", list(a.uncertainties)], ["Overall confidence", a.overall_confidence],
+      ["Models", `vision: ${show(j.model)} · structuring: ${show(j.structured_by)}`], ["Status", j.status]];
+    sec.append(el("dl", null, rows.map(([k, v]) => [el("dt", null, k), el("dd", null, typeof v === "object" && v && v.nodeType ? v : show(v))])));
+    const dims = a.dimensions || [];
+    if (dims.length) sec.append(el("table", null,
+      el("thead", null, el("tr", null, ["What", "Value (m)", "Provenance", "Basis"].map((h) => el("th", null, h)))),
+      el("tbody", null, dims.map((x) => el("tr", null, el("td", null, show(x.what)), el("td", null, show(x.value_m)),
+        el("td", { class: String(x.provenance || "unknown") }, show(x.provenance)), el("td", null, show(x.basis)))))));
+    else sec.append(el("p", { class: "empty" }, "No dimensions recorded."));
+    sec.append(el("details", null, el("summary", null, "Free-text description"), el("pre", null, show(j.description))));
+    sec.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function renderDecisions(sec, s) {
+  try {
+    const ds = (await api(`/projects/${encodeURIComponent(s)}/state/decisions.json`)).decisions || [];
+    if (!ds.length) { sec.append(el("p", { class: "empty" }, "No decisions recorded.")); return; }
+    sec.append(el("ul", { class: "plain" }, ds.map((d) => el("li", null,
+      badge(d.status || "?", d.status === "approved" ? "ok" : d.status === "rejected" ? "bad" : "warn"),
+      el("strong", null, show(d.title)), d.detail ? " — " + d.detail : "", el("small", { class: "empty" }, ` (${show(d.author)})`)))));
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function renderRevs(sec, s) {
+  try {
+    const rs = ((await api(`/projects/${encodeURIComponent(s)}/state/revision_history.json`)).revisions || []).slice(-15).reverse();
+    if (!rs.length) { sec.append(el("p", { class: "empty" }, "No revisions.")); return; }
+    sec.append(el("table", null, el("thead", null, el("tr", null, ["Rev", "When", "Author", "File", "Note"].map((h) => el("th", null, h)))),
+      el("tbody", null, rs.map((r) => el("tr", null, [r.revision, r.at, r.author, r.file, r.note].map((v) => el("td", null, show(v))))))));
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function validate(box) {
+  box.replaceChildren(el("span", { class: "empty" }, "validating…"));
+  try {
+    const v = await api(`/projects/${encodeURIComponent(slug)}/validate`, { method: "POST" });
+    box.replaceChildren(v.valid ? badge("valid", "ok") : badge("invalid", "bad"),
+      v.problems && v.problems.length ? list(v.problems) : null);
+  } catch (e) { box.replaceChildren(errBox(e.message)); }
+}
+
+async function refresh() { await Promise.all([loadStatus(), loadProjects(), loadProject()]); }
+$("refresh").addEventListener("click", refresh);
+refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Copy to config/studio.yaml (git-ignored) and set paths for your machine.
+# Anything left out falls back to studio_core/config.py DEFAULTS.
+# No secrets here: API keys come from environment variables only.
+
+paths:
+  projects_root: "projects"          # relative to the repo, or an absolute path
+
+blender:
+  executable: "<path-to-blender>/blender.exe"
+
+comfyui:
+  base_url: "http://127.0.0.1:8188"  # used from Phase 5
+
+privacy:
+  allow_cloud: false   # true = reference images and briefs may be sent to cloud models

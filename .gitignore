@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.tmp
+.lock
+# user projects hold private reference photos; keep them out of git
+projects/
+.cache/
+config/studio.yaml
