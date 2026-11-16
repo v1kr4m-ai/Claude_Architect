@@ -9,7 +9,7 @@ import time
 import urllib.request
 import webbrowser
 
-from . import brief, config, imports, ingest, layout, projects, providers, router, status, vision
+from . import brief, config, imports, ingest, layout, model3d, projects, providers, router, status, vision
 
 
 def _exit_with_parent() -> None:
@@ -70,6 +70,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("generate-plan", help="lay out a floor plan from the approved brief (as a proposal)")
     s.add_argument("project")
     s = sub.add_parser("draw", help="draw the approved model as SVG/PDF plan sheets + area schedule")
+    s.add_argument("project")
+    s = sub.add_parser("build-model", help="build the approved model in Blender: .blend, GLB, preview + consistency checks")
     s.add_argument("project")
     s = sub.add_parser("approve-import", help="adopt an import into model_spec.json (user action)")
     s.add_argument("project"); s.add_argument("import_id")
@@ -137,6 +139,8 @@ def main(argv=None) -> int:
             out = {k: rec[k] for k in ("id", "status", "summary", "warnings", "notes", "previews")}
         elif a.cmd == "draw":
             out = layout.draw(a.project)
+        elif a.cmd == "build-model":
+            out = model3d.build(a.project)
         elif a.cmd == "imports":
             out = imports.list_imports(a.project)
         elif a.cmd == "approve-import":

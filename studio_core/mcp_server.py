@@ -5,7 +5,7 @@ Calls the Python layer directly, so the REST service does not need to be running
 """
 from mcp.server.fastmcp import FastMCP
 
-from . import brief, imports, ingest, layout, projects, router, status, vision
+from . import brief, imports, ingest, layout, model3d, projects, router, status, vision
 
 mcp = FastMCP("architectural-studio")
 
@@ -112,6 +112,13 @@ def generate_plan(project: str) -> dict:
 def draw_plans(project: str) -> dict:
     """Draw the approved model geometry as SVG/PDF sheets plus an area schedule CSV in plans/."""
     return layout.draw(project)
+
+
+@mcp.tool()
+def build_model(project: str) -> dict:
+    """Build the approved geometry in Blender: .blend, GLB and a preview render, then check the
+    model against the plan (walls, openings, heights, footprint, GLB re-import). Takes ~1 minute."""
+    return model3d.build(project)
 
 
 @mcp.tool()

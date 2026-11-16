@@ -13,7 +13,7 @@ Today the engine covers project storage, reference ingestion, local vision analy
 | Import existing work | Bring in existing plans and models as reviewable geometry: **DXF** (exact walls with thickness, named rooms, doors), **IFC** (storeys, walls, spaces, doors, windows), **plan photo/scan/PDF** (axis-aligned walls scaled from one width, room names and written sizes), **3D models** GLB/GLTF/FBX/OBJ/STL/USD/.blend via Blender (footprint, storeys, preview image). User approves into `model_spec.json` | Done (v0.4.0) |
 | Model selection | Pin a model per task, or choose one for a single run; dashboard picker | Done (v0.4.0) |
 | 3 2D plans | Approved brief → deterministic floor plan (double-loaded corridor, every room reachable, stair stacked, en-suites from their bedroom, windows on outside walls) → plan checks → user approves → dimensioned A3 SVG/PDF sheets per floor + area schedule CSV. The same renderer draws imported plans | Done (v0.5.0). Live: 18-room, 2-storey house from requirements text to drawings |
-| 4 3D model | Spec-driven Blender model, GLB export | Planned |
+| 4 3D model | Approved geometry → editable Blender model: walls with real door/window openings (no booleans), windows with glass and frames, doors, floor slabs, room floor finishes, indicative dog-leg stairs, flat roof with overhang, site, materials from the brief; per-floor collections and element ids. Saves a never-overwritten `.blend`, exports GLB (re-imported to verify), renders an exterior preview and a roof-off cutaway per floor, then checks the model against the plan independently (walls, openings, floors, footprint, heights, stairs, GLB) | Done (v0.6.0). Live: 18-room house built in ~10 s, all 11 checks pass |
 | 5 Visualisation | Renders, ComfyUI enhancement, walkthrough video | Planned |
 | 6 Orchestration | Multi-agent task graph with review gates | Planned |
 | 7 Full UI | Web UI for briefs, plans, model viewer, approvals | Planned |
@@ -179,6 +179,14 @@ python -m studio_core draw hill-house
 
 Limits: rectangles only, one footprint for all floors (spare area on a smaller floor shows as "Unallocated"), balconies and terraces are listed but not drawn, a column room has only two neighbours so some adjacencies cannot be met, and the sheets say "CONCEPT — NOT FOR CONSTRUCTION".
 
+### Build the 3D model
+
+```bash
+python -m studio_core build-model hill-house
+```
+
+Writes `blender/model_rNNNN.blend` (open and edit it in Blender; a later build never overwrites it, it adds `_b2`), `output/model_rNNNN.glb` (any glTF viewer), `renders/model_rNNNN_preview.png` and `renders/model_rNNNN_cutaway_L0.png` (roof off, one per floor). The command prints 11 plan-vs-model checks; artifacts are marked authoritative only if all pass. Facade materials named in the approved brief set the colours (concrete, white render, brick, stone, wood, metal, ...; glass is used for windows). `validate` reports the model as out of date after the plan changes. Limits: flat roof only (other roof types are noted, not modelled), stairs are indicative, balconies are not modelled, lighting in the preview is plain (photoreal rendering is Phase 5).
+
 ### Start from an existing plan or model
 
 ```bash
@@ -250,6 +258,7 @@ Run as `python -m studio_core <command>`.
 | `reject-import <project> <I###> [--reason]` | Reject an import |
 | `generate-plan <project>` | Lay out a floor plan from the approved brief (saved as a proposal with preview drawings) |
 | `draw <project>` | Draw the approved geometry as SVG/PDF sheets + area schedule CSV in `plans/` |
+| `build-model <project>` | Build the approved geometry in Blender: .blend, GLB, preview, cutaways, consistency checks |
 | `models` | Per task: models able to do it, pinned choice, automatic pick |
 | `use <task> <model\|auto>` | Pin a model to a task, or return it to automatic |
 
@@ -285,6 +294,7 @@ Start with `python -m studio_core serve`. It binds to `127.0.0.1:8777` only, has
 | POST | `/projects/{slug}/imports/{iid}/reject` | Reject an import |
 | POST | `/projects/{slug}/plans/generate` | Generate a floor plan proposal from the approved brief |
 | POST | `/projects/{slug}/plans/draw` | Draw the approved geometry to `plans/` |
+| POST | `/projects/{slug}/model/build` | Build the 3D model in Blender with consistency checks |
 | GET | `/models` | Models per task, pinned and automatic choices |
 | PUT | `/models/{task}` | Pin a model (`{"model": id}`) or unpin (`{"model": null}`) |
 | POST | `/projects/{slug}/validate` | Run deterministic project checks |
@@ -317,6 +327,7 @@ The MCP server calls the Python layer directly; the REST service does not need t
 | `list_plan_imports` | List imports with status |
 | `generate_plan` | Generate a floor plan proposal from the approved brief |
 | `draw_plans` | Draw the approved geometry as plan sheets |
+| `build_model` | Build the 3D model in Blender with consistency checks |
 | `list_models` | Models per task, pinned and automatic choices |
 | `validate_project` | Run deterministic project checks |
 
@@ -385,7 +396,7 @@ See [MODEL_INVENTORY.md](MODEL_INVENTORY.md) for the benchmark detail.
 python -m unittest discover tests -v
 ```
 
-55 tests. They use stdlib `unittest` and need no GPU, network or running models, except the 3D-model import test, which runs Blender when one is configured and is skipped otherwise. Live model runs are separate manual validation.
+65 tests. They use stdlib `unittest` and need no GPU, network or running models, except the 3D-model import test, which runs Blender when one is configured and is skipped otherwise. Live model runs are separate manual validation.
 
 ## Roadmap
 

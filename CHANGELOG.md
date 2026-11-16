@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-11-16 — Phase 4: 3D model
+
+- `engines/blender/build_model.py` (Sonnet subagent, reviewed and live-tested): headless Blender build from the approved geometry. Walls split into solid pieces around openings (no booleans), sill and head pieces, glass panes with frames, door leaves, floor slabs, room floor finishes with room metadata, indicative dog-leg stairs, flat roof with overhang, site plane, Principled materials, per-floor collections, `spec_id`/`level` on every element. Saves .blend, renders a preview, exports GLB and re-imports it to verify.
+- `engines/blender/render_cutaway.py`: roof-off cutaway render per floor (any number of floors).
+- `model3d.py`: orchestration and independent plan-vs-model checks (every wall built, window/door counts, room floors, footprint vs plan incl. roof overhang, building and floor heights, stairs, GLB re-import bbox and element ids). Facade colours from the brief's materials; roof settings from the brief. `.blend` files are never overwritten (`_b2`, `_b3`...). Artifacts are authoritative only when every check passes; `validate` flags models older than the latest geometry change.
+- CLI `build-model`, REST `/model/build`, MCP `build_model`; file endpoint serves `renders/` and `output/`.
+- Live review fixes: over-exposed lighting rendered grey concrete as white (sun 4 → 2.2, sky as fill); "Glass"/"Metal" materials now recognised; router tests read the user's real pinned models (now isolated).
+
 ## 0.5.0 — 2026-11-16 — Phase 3: floor plans
 
 - `layout.py`: approved brief → floor plan. Double-loaded corridor: one footprint sized from the largest floor and the plot's proportions, 1.2 m central corridor with the front door at its south end, a column of rooms each side so every room opens onto circulation, the stair stacked in the same place on every floor, rooms split between columns by area and ordered by a small swap search so linked rooms sit side by side and public rooms face the front. Walls merged from room edges (0.23 m exterior, 0.115 m interior), doors (en-suite bathrooms and wardrobes open from their single bedroom; shared ones from the corridor), windows on outside walls (small high windows for wet rooms).

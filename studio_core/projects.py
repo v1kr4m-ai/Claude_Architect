@@ -17,6 +17,8 @@ import yaml
 from . import config
 
 PROVENANCE = ("provided", "measured", "estimated", "unknown")
+# artifacts derived from model_spec.json: stale once the model changes after they were made
+DERIVED_KINDS = ("plan_svg", "plan_pdf", "plan_csv", "model_blend", "model_glb", "model_preview")
 STATE_FILES = ("project.json", "design_brief.yaml", "model_spec.json", "reference_manifest.json",
                "decisions.json", "revision_history.json", "artifacts.json")
 SUBDIRS = ("references/originals", "references/thumbnails", "references/frames", "analysis",
@@ -279,7 +281,9 @@ def validate(slug: str) -> dict:
         f = p / art["path"]
         if not f.exists() or f.stat().st_size == 0:
             problems.append(f"artifact missing or empty: {art['path']}")
-        elif art.get("authoritative") and art["kind"] in ("plan_svg", "plan_pdf", "plan_csv") and art.get("revision", 0) < spec_rev:
-            problems.append(f"{art['path']} was drawn from r{art['revision']} but the model changed in r{spec_rev}: run draw again")
+        elif art.get("authoritative") and art["kind"] in DERIVED_KINDS and art.get("revision", 0) < spec_rev:
+            redo = "build-model" if art["kind"].startswith("model_") else "draw"
+            problems.append(f"{art['path']} was made from r{art['revision']} but the model changed in r{spec_rev}: "
+                            f"run {redo} again")
     return {"valid": not problems, "problems": problems,
             "revision": state.get("project.json", {}).get("revision")}

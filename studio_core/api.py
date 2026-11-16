@@ -5,9 +5,9 @@ from pathlib import Path
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import brief, imports, ingest, layout, projects, providers, router, status, vision
+from . import brief, imports, ingest, layout, model3d, projects, providers, router, status, vision
 
-app = FastAPI(title="Architectural Studio Core", version="0.5.0")
+app = FastAPI(title="Architectural Studio Core", version="0.6.0")
 
 
 @app.exception_handler(projects.StudioError)
@@ -54,7 +54,7 @@ def project_file(slug: str, path: str):
     pdir = projects.project_dir(slug).resolve()
     target = (pdir / path).resolve()
     allowed = (pdir / "references" / "thumbnails", pdir / "analysis", pdir / "references" / "originals",
-               pdir / "plans")  # drawings: approved sheets and proposal previews
+               pdir / "plans", pdir / "renders", pdir / "output")  # drawings, renders, GLB deliverables
     if not (any(target.is_relative_to(a) for a in allowed) and target.is_file()):
         raise HTTPException(404, "File not found")
     return FileResponse(target)
@@ -212,6 +212,11 @@ def generate_plan(slug: str):
 @app.post("/projects/{slug}/plans/draw")
 def draw_plan(slug: str):
     return layout.draw(slug)
+
+
+@app.post("/projects/{slug}/model/build")
+def build_model(slug: str):
+    return model3d.build(slug)
 
 
 @app.post("/projects/{slug}/validate")

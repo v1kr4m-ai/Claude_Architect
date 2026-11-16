@@ -14,6 +14,7 @@ os.environ["STUDIO_CONFIG"] = str(Path(_TMP.name) / "none.yaml")  # ignore the m
 from fastapi.testclient import TestClient  # noqa: E402
 
 from studio_core import api, config, ingest, projects, router, vision  # noqa: E402
+router.CHOICES = Path(_TMP.name) / "model_choices.yaml"  # never read the user's real pinned models
 from studio_core.projects import StudioError  # noqa: E402
 from studio_core.providers import ModelInfo, ProviderError  # noqa: E402
 
