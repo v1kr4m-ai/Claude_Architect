@@ -5,7 +5,7 @@ Calls the Python layer directly, so the REST service does not need to be running
 """
 from mcp.server.fastmcp import FastMCP
 
-from . import brief, ingest, projects, router, status, vision
+from . import brief, imports, ingest, projects, router, status, vision
 
 mcp = FastMCP("architectural-studio")
 
@@ -81,6 +81,23 @@ def propose_brief(project: str, requirements: str, model: str = "") -> dict:
 def list_brief_proposals(project: str) -> list[dict]:
     """List brief proposals with status. Approval is a user action (CLI/API/dashboard), not an agent tool."""
     return brief.list_proposals(project)
+
+
+@mcp.tool()
+def import_plan(project: str, path: str, width_m: float = 0, storey_height_m: float = 0,
+                unit_scale: float = 0) -> dict:
+    """Import an existing plan or 3D model (DXF, IFC, plan image/PDF, GLB/FBX/OBJ/STL/USD/.blend) as a
+    reviewable proposal. width_m sets the scale of a plan image. Does not change model_spec.json;
+    only the user can approve an import."""
+    rec = imports.import_file(project, path, author="agent", width_m=width_m or None,
+                              storey_height_m=storey_height_m or None, unit_scale=unit_scale or None)
+    return {k: rec[k] for k in ("id", "format", "summary", "warnings", "notes")}
+
+
+@mcp.tool()
+def list_plan_imports(project: str) -> list[dict]:
+    """List plan/model imports with status."""
+    return imports.list_imports(project)
 
 
 @mcp.tool()

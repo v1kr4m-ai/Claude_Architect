@@ -5,9 +5,9 @@ from pathlib import Path
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import brief, ingest, projects, providers, router, status, vision
+from . import brief, imports, ingest, projects, providers, router, status, vision
 
-app = FastAPI(title="Architectural Studio Core", version="0.3.0")
+app = FastAPI(title="Architectural Studio Core", version="0.4.0")
 
 
 @app.exception_handler(projects.StudioError)
@@ -167,6 +167,40 @@ def reject(slug: str, pid: str, req: Reject):
 @app.post("/projects/{slug}/decisions/{did}")
 def decide(slug: str, did: str, req: DecisionStatus):
     return projects.set_decision_status(slug, did, req.status)
+
+
+class PlanImport(BaseModel):
+    path: str                       # local file; API is localhost-only, single user
+    width_m: float | None = None
+    storey_height_m: float | None = None
+    unit_scale: float | None = None
+    model: str | None = None
+
+
+@app.post("/projects/{slug}/imports", status_code=201)
+def import_plan(slug: str, req: PlanImport):
+    return imports.import_file(slug, req.path, width_m=req.width_m, storey_height_m=req.storey_height_m,
+                               unit_scale=req.unit_scale, vision_model=req.model)
+
+
+@app.get("/projects/{slug}/imports")
+def list_imports(slug: str):
+    return {"imports": imports.list_imports(slug)}
+
+
+@app.get("/projects/{slug}/imports/{iid}")
+def get_import(slug: str, iid: str):
+    return imports.load(slug, iid)
+
+
+@app.post("/projects/{slug}/imports/{iid}/approve")
+def approve_import(slug: str, iid: str):
+    return imports.approve(slug, iid)
+
+
+@app.post("/projects/{slug}/imports/{iid}/reject")
+def reject_import(slug: str, iid: str, req: Reject):
+    return imports.reject(slug, iid, req.reason)
 
 
 @app.post("/projects/{slug}/validate")

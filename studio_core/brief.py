@@ -29,6 +29,16 @@ SYNONYMS = ((("parking", "car", "carport"), "garage"), (("wardrobe", "closet", "
             (("bath",), "bathroom"), (("puja", "prayer", "mandir"), "pooja"), (("staircase",), "stair"),
             (("foyer", "lobby"), "entrance"), (("laundry", "wash"), "utility"),
             (("office", "library"), "study"), (("hall", "passage", "landing"), "corridor"))
+def room_type(name: str) -> str:
+    """The one mapping from a room name ('Living Room', 'MASTER BEDROOM 1', 'Car porch') to ROOM_TYPES.
+    Used by proposals and every importer. Longest type word wins, so master_bedroom beats bedroom."""
+    v = name.strip().lower().replace(" ", "_").replace("-", "_")
+    if v in ROOM_TYPES:
+        return v
+    hit = next((t for t in sorted(ROOM_TYPES, key=len, reverse=True) if t != "other" and t in v), None)
+    return hit or next((t for words, t in SYNONYMS if any(w in v for w in words)), "other")
+
+
 GROSS_FACTOR = 1.30  # net room area -> gross built area (circulation ~18% + walls ~12%); heuristic
 
 
@@ -50,10 +60,7 @@ class PRoom(BaseModel):
     @field_validator("type", mode="before")
     @classmethod
     def _known_type(cls, v):
-        v = str(v).strip().lower().replace(" ", "_")
-        if v in ROOM_TYPES:
-            return v
-        return next((t for words, t in SYNONYMS if any(w in v for w in words)), "other")
+        return room_type(str(v))
 
 
 class PConcept(BaseModel):

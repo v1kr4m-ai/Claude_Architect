@@ -10,7 +10,7 @@
 @media (prefers-color-scheme:dark){:root{--bg:#161718;--panel:#202224;--ink:#e8e6e1;--muted:#9a9ea5;--line:#34373b;--accent:#e08a5f;--accent-ink:#161718;
 --ok:#6cc38e;--warn:#e5b04d;--bad:#f2887f;--chip:#2b2e31}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{margin:0;overflow-x:hidden;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
 header h1{font-size:15px;margin:0 8px 0 0;letter-spacing:.06em;text-transform:uppercase}
 .pill{padding:2px 9px;border-radius:99px;background:var(--chip);font-size:12px;white-space:nowrap}
@@ -20,7 +20,7 @@ header h1{font-size:15px;margin:0 8px 0 0;letter-spacing:.06em;text-transform:up
 button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:5px 12px;border-radius:6px;cursor:pointer}
 button:hover{border-color:var(--accent)}button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .spacer{flex:1}
-.layout{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px;max-width:1400px;margin:0 auto}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;padding:16px;max-width:1400px;margin:0 auto}
 aside{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;align-self:start}
 aside h2,main h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:8px 8px 6px}
 .proj{display:block;width:100%;text-align:left;border:0;border-radius:6px;padding:8px;background:none}
@@ -38,13 +38,20 @@ section h2{margin:0 0 10px}
 .group{margin-bottom:14px}.group>h3{font-size:13px;margin:0 0 8px}
 .err{border:1px solid var(--bad);color:var(--bad);border-radius:6px;padding:8px 12px;margin:0 0 10px;background:var(--panel)}
 .note{border-left:3px solid var(--warn);padding:6px 10px;background:var(--chip);margin:8px 0;font-size:13px}
-table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table{border-collapse:collapse;width:100%;font-size:13px;display:block;overflow-x:auto;max-width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--muted);font-weight:600}
 td.estimated{color:var(--warn);font-style:italic}td.unknown{color:var(--bad);font-weight:600}
 dl{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin:8px 0}dt{color:var(--muted)}dd{margin:0}
 details{margin-top:10px}pre{white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;font:12px/1.4 ui-monospace,Consolas,monospace}
 ul.plain{margin:0;padding-left:18px}.empty{color:var(--muted)}
-@media (max-width:760px){.layout{grid-template-columns:1fr;padding:12px}dl{grid-template-columns:1fr}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
+.models{margin:0 16px;max-width:1400px}.models summary{cursor:pointer;font-weight:600}
+.mrow{display:grid;grid-template-columns:110px minmax(200px,420px) auto;gap:8px;align-items:center;margin:6px 0}
+select{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:4px 8px;border-radius:6px}
+.saved{color:var(--ok);font-size:12px}
+.prow{display:block;width:100%;text-align:left;margin-bottom:6px;white-space:normal;overflow-wrap:anywhere}.prow.sel{border-color:var(--accent)}
+.concept{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--bg)}
+.warnitem{color:var(--warn)}
+@media (max-width:760px){.pill{white-space:normal}.layout{grid-template-columns:minmax(0,1fr);padding:12px}dl{grid-template-columns:1fr}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
 </style>
 </head>
 <body>
@@ -54,6 +61,7 @@ ul.plain{margin:0;padding-left:18px}.empty{color:var(--muted)}
   <span class="spacer"></span>
   <button id="refresh" class="primary">Refresh</button>
 </header>
+<details class="models" id="models"><summary>Models</summary><div id="mbody"></div></details>
 <div class="layout">
   <aside><h2>Projects</h2><div id="plist"></div></aside>
   <main id="main"><p class="empty">Select a project.</p></main>
@@ -125,12 +133,14 @@ async function loadProject() {
   const main = $("main"); main.replaceChildren();
   if (!slug) { main.append(el("p", { class: "empty" }, "Select a project.")); return; }
   const refSec = section("References"), detail = el("div", { id: "detail" }),
+    propSec = section("Brief proposals"), propDetail = el("div"),
+    impSec = section("Plan & model imports"), impDetail = el("div"),
     decSec = section("Decisions"), revSec = section("Revision history"),
     valSec = section("Validation", el("button", { on: { click: () => validate(valBox) } }, "Validate"));
   const valBox = el("div", { id: "valbox" }); valSec.append(valBox);
-  main.append(el("h2", null, slug), refSec, detail, decSec, revSec, valSec);
+  main.append(el("h2", null, slug), refSec, detail, propSec, impSec, decSec, revSec, valSec);
   const mySlug = slug;
-  await Promise.all([renderRefs(refSec, mySlug), renderDecisions(decSec, mySlug), renderRevs(revSec, mySlug)]);
+  await Promise.all([renderRefs(refSec, mySlug), renderProposals(propSec, propDetail, mySlug), renderImports(impSec, impDetail, mySlug), renderDecisions(decSec, mySlug), renderRevs(revSec, mySlug)]);
 }
 
 async function renderRefs(sec, s) {
@@ -219,7 +229,151 @@ async function validate(box) {
   } catch (e) { box.replaceChildren(errBox(e.message)); }
 }
 
-async function refresh() { await Promise.all([loadStatus(), loadProjects(), loadProject()]); }
+async function loadModels() {
+  const box = $("mbody"); box.replaceChildren();
+  try {
+    const m = await api("/models"), note = el("span", { class: "saved" });
+    box.append(el("p", { class: "empty" }, "Pinned models are used for every run of that task. Automatic picks the best local model that fits the GPU."));
+    for (const [task, t] of Object.entries(m)) {
+      const sel = el("select", null, el("option", { value: "" }, `Automatic (${show(t.automatic)})`),
+        t.candidates.map((c) => el("option", Object.assign({ value: c.id }, c.allowed ? {} : { disabled: "" }),
+          `${c.id}${c.local ? "" : " [cloud]"}${c.size_mb ? " · " + (c.size_mb / 1024).toFixed(1) + " GB" : ""}`)));
+      sel.value = t.pinned || "";
+      sel.addEventListener("change", async () => {
+        try {
+          await api("/models/" + encodeURIComponent(task), { method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: sel.value || null }) });
+          await loadModels(); const n = $("mbody").querySelector(".saved"); if (n) n.textContent = `saved (${task})`;
+        } catch (e) { sel.value = t.pinned || ""; box.prepend(errBox(e.message)); }
+      });
+      box.append(el("div", { class: "mrow" }, el("strong", null, task), sel));
+    }
+    box.append(note);
+  } catch (e) { box.append(errBox(e.message)); }
+}
+
+async function renderProposals(sec, det, s) {
+  const base = `/projects/${encodeURIComponent(s)}/proposals`;
+  const reload = () => loadProject();
+  const fail = (e) => det.prepend(errBox(e.message));
+  async function open(pid, btn) {
+    sec.querySelectorAll(".prow.sel").forEach((b) => b.classList.remove("sel")); btn.classList.add("sel");
+    det.replaceChildren();
+    try {
+      const r = await api(`${base}/${encodeURIComponent(pid)}`), p = r.proposal || {}, a = r.areas || {};
+      det.append(el("p", null, el("strong", null, show(p.summary))));
+      det.append(el("dl", null, [["Building type", p.building_type], ["Floors", p.floors], ["Style", p.style],
+        ["Net by level (m²)", Object.entries(a.net_m2_by_level || {}).map(([k, v]) => `L${k}: ${v}`).join(" · ")],
+        ["Net (m²)", a.net_m2], ["Gross estimate (m²)", a.gross_m2_estimate],
+        ["Plot coverage", a.ground_coverage_pct != null ? `${a.ground_coverage_pct}% of ${show(a.plot_m2)} m²` : null]]
+        .map(([k, v]) => [el("dt", null, k), el("dd", null, show(v))])));
+      det.append(el("table", null, el("thead", null, el("tr", null, ["Room", "Type", "Level", "Area m²", "Provenance", "Adjacent to"].map((h) => el("th", null, h)))),
+        el("tbody", null, (r.rooms || []).map((x) => el("tr", null, el("td", null, show(x.name)), el("td", null, show(x.type)), el("td", null, show(x.level)),
+          el("td", null, show(x.area_m2 && x.area_m2.value)),
+          el("td", { class: String((x.area_m2 && x.area_m2.provenance) || "unknown") }, show(x.area_m2 && x.area_m2.provenance)),
+          el("td", null, (x.adjacent_to || []).join(", ") || "—"))))));
+      const proposed = r.status === "proposed";
+      det.append(el("h3", null, "Concepts"));
+      (p.concepts || []).forEach((c, i) => det.append(el("div", { class: "concept" },
+        el("strong", null, `${i + 1}. ${show(c.name)}`),
+        r.status === "approved" && r.approved_concept === i ? badge("approved concept", "ok") : null,
+        el("dl", null, [["Massing", c.massing], ["Roof", c.roof], ["Facade materials", (c.facade_materials || []).join(", ")], ["Trade-offs", c.tradeoffs]]
+          .map(([k, v]) => [el("dt", null, k), el("dd", null, show(v))])),
+        proposed ? el("button", { class: "primary", on: { click: async () => {
+          if (!confirm(`Approve concept "${c.name}" of ${pid}? This updates the design brief.`)) return;
+          try { await api(`${base}/${encodeURIComponent(pid)}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ concept: i }) }); reload(); } catch (e) { fail(e); }
+        } } }, "Approve this concept") : null)));
+      if (r.status === "approved") det.append(el("p", null, badge("approved", "ok"), `Approved concept: ${show(r.approved_concept != null && (p.concepts || [])[r.approved_concept] ? (r.approved_concept + 1) + ". " + p.concepts[r.approved_concept].name : r.approved_concept)}`));
+      if (r.status === "rejected") det.append(el("p", null, badge("rejected", "bad"), r.reject_reason || ""));
+      if (proposed) det.append(el("button", { on: { click: async () => {
+        const reason = prompt("Reason for rejecting (optional):"); if (reason === null) return;
+        try { await api(`${base}/${encodeURIComponent(pid)}/reject`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }) }); reload(); } catch (e) { fail(e); }
+      } } }, "Reject proposal"));
+      det.append(el("h3", null, "Warnings"), (r.warnings || []).length
+        ? el("ul", { class: "plain" }, r.warnings.map((w) => el("li", { class: "warnitem" }, w))) : el("p", { class: "empty" }, "No problems found"));
+      det.append(el("h3", null, "Assumptions"), list(p.assumptions));
+      det.append(el("h3", null, "Questions for you"), list(p.open_questions));
+    } catch (e) { det.append(errBox(e.message)); }
+  }
+  try {
+    const ps = (await api(base)).proposals || [];
+    if (!ps.length) sec.append(el("p", { class: "empty" }, "No proposals."));
+    for (const q of ps) {
+      const b = el("button", { class: "prow" }, badge(q.status, q.status === "approved" ? "ok" : q.status === "rejected" ? "bad" : "warn"),
+        el("strong", null, q.id), ` · ${show(q.model)} · ${q.warnings} warning(s) — ${show(q.summary)}`);
+      b.addEventListener("click", () => open(q.id, b));
+      sec.append(b);
+    }
+    sec.append(det);
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function renderImports(sec, det, s) {
+  const base = `/projects/${encodeURIComponent(s)}/imports`;
+  const reload = () => loadProject();
+  const fail = (e) => det.prepend(errBox(e.message));
+  const scls = (st) => st === "approved" ? "ok" : st === "rejected" ? "bad" : "warn";
+  const extent = (x) => Array.isArray(x) && x.length ? x.join(" × ") + " m" : null;
+  const sumLine = (m) => [m.levels != null && `${m.levels} levels`, m.walls != null && `${m.walls} walls`,
+    m.spaces != null && `${m.spaces} rooms`, m.doors != null && `${m.doors} doors`, extent(m.extent_m)]
+    .filter(Boolean).join(" · ") || "no geometry";
+  const prov = (p) => el("td", { class: String(p || "unknown") }, show(p));
+  const tbl = (heads, rows) => rows.length
+    ? el("table", null, el("thead", null, el("tr", null, heads.map((h) => el("th", null, h)))), el("tbody", null, rows))
+    : el("p", { class: "empty" }, "None recorded.");
+  async function open(iid, btn) {
+    sec.querySelectorAll(".prow.sel").forEach((b) => b.classList.remove("sel")); btn.classList.add("sel");
+    det.replaceChildren();
+    try {
+      const r = await api(`${base}/${encodeURIComponent(iid)}`), g = r.geometry || {}, m = r.summary || {}, src = g.source || {};
+      const levels = g.levels || [], spaces = g.spaces || [], walls = g.walls || [], openings = g.openings || [];
+      det.append(el("p", null, el("strong", null, show(src.original_name)), " · ", show(r.format) + " · ", badge(show(r.status), scls(r.status))));
+      if (r.status === "proposed") det.append(el("button", { class: "primary", on: { click: async () => {
+        if (!confirm(`Approve import ${iid}? This replaces the current geometry in model_spec.json.`)) return;
+        try { await api(`${base}/${encodeURIComponent(iid)}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}) }); reload(); } catch (e) { fail(e); }
+      } } }, "Approve (replaces the model geometry)"));
+      if (r.status === "proposed") det.append(el("button", { on: { click: async () => {
+        const reason = prompt("Reason for rejecting (optional):"); if (reason === null) return;
+        try { await api(`${base}/${encodeURIComponent(iid)}/reject`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }) }); reload(); } catch (e) { fail(e); }
+      } } }, "Reject"));
+      det.append(el("h3", null, "Notes"), list(r.notes));
+      det.append(el("h3", null, "Warnings"), (r.warnings || []).length
+        ? el("ul", { class: "plain" }, r.warnings.map((w) => el("li", { class: "warnitem" }, w))) : el("p", { class: "empty" }, "No problems found"));
+      det.append(el("h3", null, "Summary"), el("dl", null, [["Levels", m.levels], ["Rooms", m.spaces], ["Walls", m.walls], ["Doors", m.doors],
+        ["Windows", m.windows], ["Extent (m)", extent(m.extent_m)], ["Room area (m²)", m.room_area_m2]]
+        .map(([k, v]) => [el("dt", null, k), el("dd", null, show(v))])));
+      det.append(el("h3", null, "Levels"), tbl(["Name", "Elevation (m)", "Height (m)", "Provenance"],
+        levels.map((l) => el("tr", null, el("td", null, show(l.name)), el("td", null, show(l.elevation_m)), el("td", null, show(l.height_m)), prov(l.provenance)))));
+      det.append(el("h3", null, "Rooms"), tbl(["Name", "Type", "Level", "Area m²", "Provenance"],
+        spaces.map((x) => el("tr", null, el("td", null, show(x.name)), el("td", null, show(x.type)), el("td", null, show(x.level)), el("td", null, show(x.area_m2)), prov(x.provenance)))));
+      const thick = walls.map((w) => w.thickness_m).filter((v) => v != null);
+      const distinct = [...new Set(thick)].sort((a, b) => a - b);
+      det.append(el("h3", null, "Walls"), el("p", null, `${walls.length} walls · ${thick.length} with known thickness · thickness values (m): ${distinct.join(", ") || "—"}`));
+      const byKind = openings.reduce((a, o) => { a[o.kind] = (a[o.kind] || 0) + 1; return a; }, {});
+      det.append(el("h3", null, "Openings"), el("p", null, `${openings.length} openings` +
+        (Object.keys(byKind).length ? " · " + Object.entries(byKind).map(([k, v]) => `${k}: ${v}`).join(" · ") : "")));
+      const pv = String(src.preview || "").replace(/\\/g, "/");
+      if (pv.includes("/references/plans/")) det.append(el("p", { class: "note" }, "Preview image saved: " + pv.split("/").pop()));
+    } catch (e) { det.append(errBox(e.message)); }
+  }
+  try {
+    const is = (await api(base)).imports || [];
+    if (!is.length) sec.append(el("p", { class: "empty" }, "No imports."));
+    for (const i of is) {
+      const b = el("button", { class: "prow" }, badge(show(i.status), scls(i.status)),
+        el("strong", null, i.id), ` · ${show(i.format)} · ${show(i.file)} — ${sumLine(i.summary || {})} · ${i.warnings} warning(s)`);
+      b.addEventListener("click", () => open(i.id, b));
+      sec.append(b);
+    }
+    sec.append(det);
+  } catch (e) { sec.append(errBox(e.message)); }
+}
+
+async function refresh() { await Promise.all([loadStatus(), loadModels(),loadProjects(), loadProject()]); }
 $("refresh").addEventListener("click", refresh);
 refresh();
 </script>

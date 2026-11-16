@@ -1,4 +1,5 @@
 """Live environment probe. Reports what is actually reachable right now, nothing assumed."""
+import functools
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,11 @@ def blender(cfg: dict) -> dict:
     exe = cfg["blender"]["executable"]
     if not exe or not Path(exe).is_file():
         return {"ok": False, "detail": "blender.executable not set or not found in config/studio.yaml"}
+    return _blender_version(exe)
+
+
+@functools.lru_cache(maxsize=4)  # launching Blender costs seconds; the version cannot change while running
+def _blender_version(exe: str) -> dict:
     try:
         out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=60).stdout
         return {"ok": True, "executable": exe, "version": out.splitlines()[0].strip()}
@@ -30,10 +36,10 @@ def comfyui(cfg: dict) -> dict:
 
 def report() -> dict:
     cfg = config.load()
-    provs = {}
-    for p in providers.all_providers():
-        up = p.available()
-        provs[p.name] = {"available": up, "models": [m.to_dict() for m in p.models()] if up else []}
+    inv = providers.inventory()
+    provs = {p.name: {"available": any(m.provider == p.name for m in inv),
+                      "models": [m.to_dict() for m in inv if m.provider == p.name]}
+             for p in providers.all_providers()}
     return {"gpu": router.gpu(), "blender": blender(cfg), "comfyui": comfyui(cfg),
             "ffmpeg": bool(shutil.which("ffmpeg")), "pdftoppm": bool(shutil.which("pdftoppm")),
             "privacy": cfg["privacy"], "projects_root": cfg["paths"]["projects_root"], "providers": provs}

@@ -10,13 +10,15 @@ Today the engine covers project storage, reference ingestion, local vision analy
 |---|---|---|
 | 1 Foundation | Project store, config, providers, router, ingest (image/video/PDF), two-step vision analysis, REST, MCP, CLI | Done |
 | 2 Design brief proposals | Requirements text -> local reasoning model drafts rooms, areas, adjacency and 1-3 concepts -> deterministic checks -> user approves a concept into `design_brief.yaml` | Done. Live run: 14-room proposal for a 2-storey house in 57 s on qwen3:8b; checks flagged missing stairs and a 16% area overrun |
-| 3 2D plans | Deterministic plan generator from the approved spec | Planned |
+| Import existing work | Bring in existing plans and models as reviewable geometry: **DXF** (exact walls with thickness, named rooms, doors), **IFC** (storeys, walls, spaces, doors, windows), **plan photo/scan/PDF** (axis-aligned walls scaled from one width, room names and written sizes), **3D models** GLB/GLTF/FBX/OBJ/STL/USD/.blend via Blender (footprint, storeys, preview image). User approves into `model_spec.json` | Done (v0.4.0) |
+| Model selection | Pin a model per task, or choose one for a single run; dashboard picker | Done (v0.4.0) |
+| 3 2D plans | Deterministic plan generator from the approved brief, dimensioned SVG/PDF | Next |
 | 4 3D model | Spec-driven Blender model, GLB export | Planned |
 | 5 Visualisation | Renders, ComfyUI enhancement, walkthrough video | Planned |
 | 6 Orchestration | Multi-agent task graph with review gates | Planned |
 | 7 Full UI | Web UI for briefs, plans, model viewer, approvals | Planned |
 
-The dashboard at `http://127.0.0.1:8777/` is read-only and does not show proposals yet.
+The dashboard at `http://127.0.0.1:8777/` shows status, references and analyses, brief proposals and plan imports (with approve/reject buttons), and lets you pick a model per task.
 
 ## Key principles
 
@@ -157,6 +159,50 @@ Run the deterministic project checks:
 python -m studio_core validate hill-house
 ```
 
+### Start from an existing plan or model
+
+```bash
+python -m studio_core import-plan hill-house existing_plan.dxf
+```
+
+```bash
+python -m studio_core import-plan hill-house scanned_plan.jpg --width-m 12.5
+```
+
+```bash
+python -m studio_core import-plan hill-house old_house.glb
+```
+
+```bash
+python -m studio_core approve-import hill-house I001
+```
+
+Each import is saved as `imports/I###.json` with what was found, the checks and the notes on what could not be extracted; the original file is kept in `references/plans/`. Nothing changes the model until you approve it.
+
+| Format | What comes out | Accuracy |
+|---|---|---|
+| DXF | Walls (thickness from double lines), rooms from closed outlines on room layers with their text labels, doors/windows from named blocks | Exact (`provided`); units from `$INSUNITS`, guessed and marked `estimated` if missing |
+| IFC | Storeys, walls (centreline, thickness, height), spaces, doors, windows | Exact (`provided`) |
+| Plan image / PDF | Axis-aligned walls with thickness; room names and sizes written on the drawing (feet-inches or metric, parsed in code, not by the model) | Walls `measured` from one width you give (`--width-m`) or an overall width written on the drawing; room positions are not extracted |
+| GLB/GLTF/USD | Footprint (outer envelope incl. overhangs), storeys from floor slabs, preview render; ground/terrain left out | `measured` (these formats are in metres) |
+| FBX/OBJ/STL/.blend | Same as above | `estimated` unless you pass `--unit-scale` |
+
+### Choose models
+
+```bash
+python -m studio_core models
+```
+
+```bash
+python -m studio_core use vision ollama/llava:latest
+```
+
+```bash
+python -m studio_core analyse hill-house --model ollama/llama3.2-vision:latest
+```
+
+`use <task> auto` returns a task to automatic routing. A chosen model that is missing, cannot do the task, or is a cloud model while cloud is off is refused with the reason; it never silently falls back to another model.
+
 Results: `projects/hill-house/analysis/reference_analysis.md` and `analysis/REF###.json` for analysis, `proposals/P001.md` and `.json` for proposals. Videos become frames every 2 s (at most 24); PDFs become one image per page; each frame or page is analysed on its own.
 
 ## CLI reference
@@ -178,6 +224,14 @@ Run as `python -m studio_core <command>`.
 | `approve <project> <proposal> [--concept N]` | Adopt a proposal and one concept into the brief (user action) |
 | `reject <project> <proposal> [--reason]` | Reject a proposal |
 | `decide <project> <decision> <approved\|rejected>` | Approve or reject a recorded decision (user action) |
+| `import-plan <project> <file> [--width-m W] [--storey-height-m H] [--unit-scale S] [--model M]` | Import an existing plan or 3D model (DXF, IFC, image/PDF, GLB/GLTF/FBX/OBJ/STL/USD/.blend) |
+| `imports <project>` | List plan/model imports with status |
+| `approve-import <project> <I###>` | Replace the model geometry with an import (user action) |
+| `reject-import <project> <I###> [--reason]` | Reject an import |
+| `models` | Per task: models able to do it, pinned choice, automatic pick |
+| `use <task> <model\|auto>` | Pin a model to a task, or return it to automatic |
+
+`analyse` and `propose` also take `--model <id>` for a single run.
 
 ## REST API
 
@@ -202,7 +256,16 @@ Start with `python -m studio_core serve`. It binds to `127.0.0.1:8777` only, has
 | GET | `/projects/{slug}/proposals/{pid}` | Read one proposal |
 | POST | `/projects/{slug}/proposals/{pid}/approve` | Adopt a proposal and concept into the brief |
 | POST | `/projects/{slug}/proposals/{pid}/reject` | Reject a proposal |
+| POST | `/projects/{slug}/imports` | Import an existing plan or 3D model by local file path |
+| GET | `/projects/{slug}/imports` | List imports |
+| GET | `/projects/{slug}/imports/{iid}` | Read one import |
+| POST | `/projects/{slug}/imports/{iid}/approve` | Adopt an import into `model_spec.json` |
+| POST | `/projects/{slug}/imports/{iid}/reject` | Reject an import |
+| GET | `/models` | Models per task, pinned and automatic choices |
+| PUT | `/models/{task}` | Pin a model (`{"model": id}`) or unpin (`{"model": null}`) |
 | POST | `/projects/{slug}/validate` | Run deterministic project checks |
+
+`/analyse` and `/proposals` accept an optional `model` field for a single run.
 
 ## MCP (Claude Code or any MCP client)
 
@@ -226,9 +289,12 @@ The MCP server calls the Python layer directly; the REST service does not need t
 | `propose_decision` | Record a decision as `proposed` |
 | `propose_brief` | Draft a brief proposal from requirements text |
 | `list_brief_proposals` | List proposals with status |
+| `import_plan` | Import an existing plan or 3D model as a reviewable proposal |
+| `list_plan_imports` | List imports with status |
+| `list_models` | Models per task, pinned and automatic choices |
 | `validate_project` | Run deterministic project checks |
 
-Agents can propose but cannot approve. Approving a decision or a brief proposal is available only through the CLI and REST API, not as an MCP tool.
+`analyse_references` and `propose_brief` take an optional `model`. Agents can propose but cannot approve: approving a decision, brief proposal or import, and pinning models, are available only through the CLI, REST API and dashboard, not as MCP tools.
 
 ## Project folder layout
 
@@ -238,12 +304,12 @@ Projects live under `projects/` (git-ignored, since they hold your private refer
 projects/<slug>/
   project.json  design_brief.yaml  model_spec.json  reference_manifest.json
   decisions.json  revision_history.json  artifacts.json
-  references/{originals,thumbnails,frames}/
-  analysis/   proposals/   plans/   blender/   renders/   videos/   output/
+  references/{originals,thumbnails,frames,plans}/
+  analysis/   proposals/   imports/   plans/   blender/   renders/   videos/   output/
   backups/    logs/
 ```
 
-`proposals/` is created the first time you run `propose`.
+`proposals/` and `imports/` are created the first time you run `propose` or `import-plan`.
 
 | State file | Holds |
 |---|---|
@@ -279,7 +345,8 @@ Measured on an RTX 5060 Laptop GPU with 8 GB VRAM:
 
 - **Two-step vision.** Asking a vision model to fill a JSON schema directly gave near-useless output (materials guessed, openings "not visible"). Instead, `llama3.2-vision` describes the image freely and `qwen2.5:7b` structures that text into the schema. On a test render this got render type, storeys, roof and style right and labelled the size estimate as `estimated`.
 - **Speed.** About 1.5-2 minutes per image end to end.
-- **VRAM.** `llama3.2-vision` is 7.4 GB on disk but about 12 GB loaded, so it spills partly into system RAM. The router currently judges fit by file size and notes this limit.
+- **VRAM.** `llama3.2-vision` is 7.4 GB on disk but about 12 GB loaded, so it spills partly into system RAM. After a model's first run the router records its real loaded size (`.cache/`) and judges fit on that.
+- **Model list cache.** Listing models asks Ollama about each one (~13 s for 18 models), so the list is cached for 60 s.
 - **Context and output caps.** `num_ctx` is 8192 (Ollama's default 32k pushed models off the GPU) and `num_predict` is capped at 1200 because the vision model could otherwise loop for over ten minutes on some images. Images are resized to at most 1024 px.
 - **Unloading.** Each step unloads its model (`keep_alive: 0`) so only one model is resident.
 - **Quality ceiling.** Local vision is good for style, massing, roof form and storeys, and weak on materials and exact counts. A cloud vision model is the upgrade path if you accept sending images off the machine.
@@ -292,7 +359,7 @@ See [MODEL_INVENTORY.md](MODEL_INVENTORY.md) for the benchmark detail.
 python -m unittest discover tests -v
 ```
 
-26 tests (17 for Phase 1, 9 for Phase 2). They use stdlib `unittest` and need no GPU, network or running models. Live model runs are separate manual validation.
+44 tests. They use stdlib `unittest` and need no GPU, network or running models, except the 3D-model import test, which runs Blender when one is configured and is skipped otherwise. Live model runs are separate manual validation.
 
 ## Roadmap
 
@@ -309,6 +376,7 @@ python -m unittest discover tests -v
 - Pinterest URLs are not fetched; save the image and import the file.
 - Brief proposals depend on a small local model: review the check warnings and assumptions before approving.
 - The API has no authentication and is for single-user localhost use only.
+- Imports extract what each format reliably holds and say what they skipped: DXF ignores arcs and multi-floor layer splits; IFC reduces curved walls to rectangles; plan images give axis-aligned walls and no room positions; 3D models give the outer envelope (courtyards and interior walls are not extracted).
 - Phases 3-7 do not exist. A Blender massing script in `engines/blender/` is a smoke test and does not read the project spec.
 
 ## Documentation

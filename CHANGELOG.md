@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — 2026-11-16 — Import existing work; model selection
+
+- `geometry.py`: authoritative geometry schema for `model_spec.json` (levels, spaces with polygons, walls with thickness, openings; provenance per element) and deterministic checks (overlaps, tiny rooms, unknown thicknesses, implausible units).
+- `imports.py` + `importers/`: existing plans and models become reviewable `imports/I###.json`; user approval replaces the model geometry with backup, revision and decision.
+  - DXF (ezdxf): units from `$INSUNITS`, double-line walls merged with real thickness, rooms from closed outlines + text labels, doors/windows from blocks. Live: 12 x 9 m test house → 6 walls at 0.23 m, 3 named rooms, 2 doors.
+  - IFC (ifcopenshell): storeys, walls, spaces, doors, windows from real geometry.
+  - Plan image/PDF (OpenCV + two-step vision): axis-aligned walls scaled from one width; room names and written sizes, with feet-inches parsed in code.
+  - 3D models via headless Blender: GLB/GLTF/FBX/OBJ/STL/USD/.blend → footprint, storeys from slabs, preview render; terrain/ground planes detected and excluded (live: 28 x 24 m with ground → 13 x 9 m building envelope).
+- Model selection: per-run `--model`, pinned per-task choices (`use`, `PUT /models/{task}`, dashboard picker), `models` overview. Invalid choices refused, never silently replaced.
+- Dashboard: model picker, brief proposals and plan imports with approve/reject.
+- Fixes: `config.load()` leaked mutations into defaults (now deep-copied); `/status` 16 s → 3 s and `/models` 13 s → 0.3 s (60 s model-list cache, Blender version cached).
+- Dependencies added: ezdxf, ifcopenshell (user-approved).
+- 44 tests. Importers written by Sonnet subagents from a spec, reviewed and live-tested.
+
 ## 0.3.0 — 2026-11-16 — Phase 2: design brief proposals
 
 - `brief.py`: requirements text + reference analyses -> local reasoning model (qwen3:8b, thinking off) drafts building type, floors, rooms with areas and levels, adjacencies, 1-3 concepts, assumptions, questions.

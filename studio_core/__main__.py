@@ -9,7 +9,7 @@ import time
 import urllib.request
 import webbrowser
 
-from . import brief, config, ingest, projects, providers, router, status, vision
+from . import brief, config, imports, ingest, projects, providers, router, status, vision
 
 
 def _exit_with_parent() -> None:
@@ -60,6 +60,17 @@ def main(argv=None) -> int:
     s.add_argument("project"); g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--text", help="requirements as text"); g.add_argument("--file", help="requirements .txt/.md file")
     s.add_argument("--model", help="reasoning model for this run, e.g. ollama/qwen3:8b")
+    s = sub.add_parser("import-plan", help="import an existing plan or 3D model (dxf, ifc, image/pdf, glb/fbx/obj/stl/usd/blend)")
+    s.add_argument("project"); s.add_argument("file")
+    s.add_argument("--width-m", type=float, help="plan image: real overall building width, sets the scale")
+    s.add_argument("--storey-height-m", type=float, help="3D model: storey height for level estimate")
+    s.add_argument("--unit-scale", type=float, help="3D model: metres per file unit (FBX/OBJ/STL)")
+    s.add_argument("--model", help="plan image: vision model for this run")
+    s = sub.add_parser("imports", help="list plan/model imports"); s.add_argument("project")
+    s = sub.add_parser("approve-import", help="adopt an import into model_spec.json (user action)")
+    s.add_argument("project"); s.add_argument("import_id")
+    s = sub.add_parser("reject-import", help="reject an import")
+    s.add_argument("project"); s.add_argument("import_id"); s.add_argument("--reason", default="")
     sub.add_parser("models", help="list models per task: available, pinned, automatic pick")
     s = sub.add_parser("use", help="pin a model to a task (or 'auto' to unpin)")
     s.add_argument("task", choices=sorted(router.TASKS)); s.add_argument("model")
@@ -113,6 +124,16 @@ def main(argv=None) -> int:
             rec = brief.propose(a.project, text, reasoning_model=a.model)
             print(brief.render(rec))
             return 0
+        elif a.cmd == "import-plan":
+            rec = imports.import_file(a.project, a.file, width_m=a.width_m, storey_height_m=a.storey_height_m,
+                                      unit_scale=a.unit_scale, vision_model=a.model)
+            out = {k: rec[k] for k in ("id", "status", "format", "summary", "warnings", "notes")}
+        elif a.cmd == "imports":
+            out = imports.list_imports(a.project)
+        elif a.cmd == "approve-import":
+            out = imports.approve(a.project, a.import_id)
+        elif a.cmd == "reject-import":
+            out = imports.reject(a.project, a.import_id, a.reason)
         elif a.cmd == "models":
             out = router.overview()
         elif a.cmd == "use":

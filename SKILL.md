@@ -7,7 +7,7 @@ description: Run the local Architectural Studio engine (this repository). Use wh
 
 Engine lives in this repository's folder. Run every command from there. Read its `README.md` for the full command list and `IMPLEMENTATION_PLAN.md` for what is built.
 
-## What works today (Phases 1-2)
+## What works today (Phases 1-2, plus imports and model choice)
 
 ```bash
 python -m studio_core status                      # GPU, Blender, ComfyUI, models
@@ -18,7 +18,14 @@ python -m studio_core validate <slug>
 python -m studio_core propose <slug> --file requirements.txt   # Phase 2: draft brief, ~1 min
 python -m studio_core proposals <slug>
 python -m studio_core approve <slug> P001 --concept N          # USER action only
+python -m studio_core import-plan <slug> <file> [--width-m W]  # existing DXF/IFC/plan image/PDF/GLB/FBX/OBJ/STL/USD/.blend
+python -m studio_core imports <slug>
+python -m studio_core approve-import <slug> I001               # USER action only: replaces model geometry
+python -m studio_core models                                   # which model does which task
+python -m studio_core use <task> <model|auto>                  # USER choice: pin a model
 ```
+
+For a plan photo/scan, pass `--width-m` with the real overall width if the drawing does not state one; without a scale only room names and written sizes come through. Read `projects/<slug>/imports/I###.json` notes and warnings and tell the user what was and was not extracted before they approve.
 
 Proposal to read and summarise: `projects/<slug>/proposals/P###.md` (rooms, areas, concepts, check warnings, questions). Never run `approve` yourself; show the user the proposal and let them choose.
 

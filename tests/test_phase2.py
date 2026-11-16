@@ -86,6 +86,9 @@ class Check(unittest.TestCase):
         p = proposal(rooms=[room("Gym", "Home Gym", 0, 15, adj=["Car"]), room("Car", "Parking", 0, 5, adj=["Gym"])],
                      floors=1)
         self.assertEqual([r.type for r in p.rooms], ["other", "garage"])
+        for name, t in (("Living Room", "living"), ("MASTER BEDROOM 1", "master_bedroom"), ("Bedroom 2", "bedroom"),
+                        ("LIVING / DINING", "living"), ("Car porch", "garage"), ("Puja", "pooja")):
+            self.assertEqual(brief.room_type(name), t, name)
 
     def test_plot_number_does_not_verify_room_area(self):
         # live bug: "12" from "12 x 20 m plot" verified a 12 m2 bedroom as provided

@@ -5,6 +5,7 @@ Adding a provider = one class with name / available() / models() / chat(), then 
 """
 import base64
 import json
+import time
 import os
 from dataclasses import asdict, dataclass, field
 
@@ -156,12 +157,19 @@ def all_providers() -> list:
     return [Ollama(), Anthropic()]
 
 
-def inventory() -> list[ModelInfo]:
-    """Every model from every provider that is reachable right now."""
+_INV = {"at": 0.0, "models": None}
+
+
+def inventory(max_age_s: float = 60) -> list[ModelInfo]:
+    """Every model from every reachable provider. Cached: listing asks Ollama about each model
+    one by one (~13 s for 18 models), far too slow to repeat on every dashboard refresh."""
+    if _INV["models"] is not None and time.monotonic() - _INV["at"] < max_age_s:
+        return _INV["models"]
     out = []
     for p in all_providers():
         if p.available():
             out.extend(p.models())
+    _INV.update(at=time.monotonic(), models=out)
     return out
 
 
