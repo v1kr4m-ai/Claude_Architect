@@ -207,13 +207,15 @@ def _context(slug: str) -> tuple[str, set[str]]:
     return "\n".join(lines[:12]) or "(no analysed references)", known
 
 
-def propose(slug: str, requirements: str, provider=None, model: str | None = None) -> dict:
+def propose(slug: str, requirements: str, provider=None, model: str | None = None,
+            reasoning_model: str | None = None) -> dict:
+    """reasoning_model: optional model id for this run, e.g. 'ollama/qwen3:8b'."""
     if len(requirements.strip()) < 15:
         raise StudioError("Requirements are too short to design from")
     cfg = config.load()
     think = None
     if provider is None:
-        c = router.pick("reasoning", cfg=cfg)
+        c = router.pick("reasoning", cfg=cfg, override=reasoning_model)
         provider, model = providers.get(c["model"].provider), c["model"].name
         reason = c["reason"]
         if c["model"].local and "thinking" in c["model"].capabilities:

@@ -1,6 +1,8 @@
 """Capability-based model routing. Local first; cloud only when the privacy policy allows it."""
 import subprocess
 
+import yaml
+
 from . import config
 from .providers import ModelInfo, ProviderError, inventory
 
@@ -27,13 +29,79 @@ def gpu() -> dict | None:
         return None
 
 
+CHOICES = config.ROOT / "config" / "model_choices.yaml"  # per-machine, git-ignored
+
+
+def choices() -> dict:
+    try:
+        return yaml.safe_load(CHOICES.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return {}
+
+
+def _check(task: str, model_id: str, models: list[ModelInfo], cfg: dict) -> ModelInfo:
+    m = next((x for x in models if x.id == model_id), None)
+    if m is None:
+        raise ProviderError(f"Model {model_id} is not available. Installed: "
+                            + ", ".join(x.id for x in models if TASKS[task] <= x.capabilities))
+    if not TASKS[task] <= m.capabilities:
+        raise ProviderError(f"{model_id} cannot do '{task}': needs {sorted(TASKS[task])}, "
+                            f"has {sorted(m.capabilities)}")
+    if not m.local and not cfg["privacy"]["allow_cloud"]:
+        raise ProviderError(f"{model_id} is a cloud model and privacy.allow_cloud is off")
+    return m
+
+
+def set_choice(task: str, model_id: str | None, models: list[ModelInfo] | None = None) -> dict:
+    """Pin a model to a task (None = back to automatic). Validated before saving."""
+    if task not in TASKS:
+        raise ProviderError(f"Unknown task: {task}")
+    c = choices()
+    if model_id:
+        _check(task, model_id, inventory() if models is None else models, config.load())
+        c[task] = model_id
+    else:
+        c.pop(task, None)
+    CHOICES.write_text(yaml.safe_dump(c, sort_keys=True), encoding="utf-8")
+    return c
+
+
+def overview(models: list[ModelInfo] | None = None) -> dict:
+    """Per task: models able to do it, the pinned choice, and what automatic routing would pick."""
+    cfg = config.load()
+    models = inventory() if models is None else models
+    g = gpu()
+    free = g["free_mb"] if g else 0
+    pinned = choices()
+    out = {}
+    for task, need in TASKS.items():
+        able = [m for m in models if need <= m.capabilities]
+        try:
+            auto = pick(task, models, cfg, free, override=None, use_choices=False)["model"].id
+        except ProviderError:
+            auto = None
+        out[task] = {"pinned": pinned.get(task), "automatic": auto,
+                     "in_use": pinned.get(task) or auto,
+                     "candidates": [{"id": m.id, "local": m.local, "size_mb": m.size_mb,
+                                     "allowed": m.local or cfg["privacy"]["allow_cloud"]} for m in able]}
+    return out
+
+
 def pick(task: str, models: list[ModelInfo] | None = None, cfg: dict | None = None,
-         free_vram_mb: int | None = None) -> dict:
-    """Return {"model": ModelInfo, "reason": str, "rejected": [...]} or raise ProviderError."""
+         free_vram_mb: int | None = None, override: str | None = None, use_choices: bool = True) -> dict:
+    """Return {"model": ModelInfo, "reason": str, "rejected": [...]} or raise ProviderError.
+
+    Order: per-call override > user's pinned choice > automatic. A chosen model that is
+    missing or not allowed is an error, never a silent fallback to something else.
+    """
     if task not in TASKS:
         raise ProviderError(f"Unknown task: {task}")
     cfg = cfg or config.load()
     models = inventory() if models is None else models
+    chosen = override or (choices().get(task) if use_choices else None)
+    if chosen:
+        return {"model": _check(task, chosen, models, cfg), "rejected": [],
+                "reason": f"task={task}; {'chosen for this run' if override else 'pinned by user'}"}
     if free_vram_mb is None:
         g = gpu()
         free_vram_mb = g["free_mb"] if g else 0

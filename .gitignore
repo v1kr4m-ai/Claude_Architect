@@ -6,3 +6,4 @@ __pycache__/
 projects/
 .cache/
 config/studio.yaml
+config/model_choices.yaml

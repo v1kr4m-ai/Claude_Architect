@@ -54,10 +54,15 @@ def main(argv=None) -> int:
     s.add_argument("project"); s.add_argument("files", nargs="+"); s.add_argument("--note", default="")
     s = sub.add_parser("analyse", help="run vision analysis")
     s.add_argument("project"); s.add_argument("--ref"); s.add_argument("--force", action="store_true")
+    s.add_argument("--model", help="vision model for this run, e.g. ollama/llava:latest")
     s = sub.add_parser("validate", help="run deterministic project checks"); s.add_argument("project")
     s = sub.add_parser("propose", help="draft a design brief proposal from requirements")
     s.add_argument("project"); g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--text", help="requirements as text"); g.add_argument("--file", help="requirements .txt/.md file")
+    s.add_argument("--model", help="reasoning model for this run, e.g. ollama/qwen3:8b")
+    sub.add_parser("models", help="list models per task: available, pinned, automatic pick")
+    s = sub.add_parser("use", help="pin a model to a task (or 'auto' to unpin)")
+    s.add_argument("task", choices=sorted(router.TASKS)); s.add_argument("model")
     s = sub.add_parser("proposals", help="list brief proposals"); s.add_argument("project")
     s = sub.add_parser("approve", help="adopt a proposal into the brief (user action)")
     s.add_argument("project"); s.add_argument("proposal"); s.add_argument("--concept", type=int, default=0)
@@ -101,12 +106,17 @@ def main(argv=None) -> int:
         elif a.cmd == "import":
             out = [ingest.import_reference(a.project, f, a.note) for f in a.files]
         elif a.cmd == "analyse":
-            out = vision.analyse(a.project, a.ref) if a.ref else vision.analyse_all(a.project, a.force)
+            out = (vision.analyse(a.project, a.ref, vision_model=a.model) if a.ref
+                   else vision.analyse_all(a.project, a.force, vision_model=a.model))
         elif a.cmd == "propose":
             text = a.text if a.text else open(a.file, encoding="utf-8").read()
-            rec = brief.propose(a.project, text)
+            rec = brief.propose(a.project, text, reasoning_model=a.model)
             print(brief.render(rec))
             return 0
+        elif a.cmd == "models":
+            out = router.overview()
+        elif a.cmd == "use":
+            out = router.set_choice(a.task, None if a.model == "auto" else a.model)
         elif a.cmd == "proposals":
             out = brief.list_proposals(a.project)
         elif a.cmd == "approve":

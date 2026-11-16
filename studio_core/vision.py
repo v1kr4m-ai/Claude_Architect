@@ -103,7 +103,9 @@ def parse(raw: str) -> ReferenceAnalysis:
     return ReferenceAnalysis.model_validate(json.loads(raw[start:end + 1]))
 
 
-def analyse(slug: str, ref_id: str, provider=None, model: str | None = None, unload: bool = True) -> dict:
+def analyse(slug: str, ref_id: str, provider=None, model: str | None = None, unload: bool = True,
+            vision_model: str | None = None) -> dict:
+    """vision_model: optional model id for this run, e.g. 'ollama/llava:latest'."""
     cfg = config.load()
     p = projects.project_dir(slug)
     ref = next((r for r in projects.read_state(slug, "reference_manifest.json")["references"]
@@ -113,7 +115,7 @@ def analyse(slug: str, ref_id: str, provider=None, model: str | None = None, unl
     if ref["kind"] in ("video", "pdf"):
         raise StudioError(f"{ref_id} is a {ref['kind']}; analyse its frames/pages ({ref_id}-01 ...)")
     if provider is None:
-        v, j = router.pick("vision", cfg=cfg), router.pick("json", cfg=cfg)
+        v, j = router.pick("vision", cfg=cfg, override=vision_model), router.pick("json", cfg=cfg)
         provider, model = providers.get(v["model"].provider), v["model"].name
         jprovider, jmodel = providers.get(j["model"].provider), j["model"].name
         reason = {"vision": v["reason"], "json": j["reason"]}
@@ -159,14 +161,14 @@ def analyse(slug: str, ref_id: str, provider=None, model: str | None = None, unl
     return record
 
 
-def analyse_all(slug: str, force: bool = False) -> dict:
+def analyse_all(slug: str, force: bool = False, vision_model: str | None = None) -> dict:
     refs = [r for r in projects.read_state(slug, "reference_manifest.json")["references"]
             if r["kind"] in ("image", "frame", "page") and (force or not r.get("analysis"))
             and not r.get("near_duplicate_of")]
     done, failed = [], []
     for r in refs:
         try:
-            done.append(analyse(slug, r["id"])["reference"])
+            done.append(analyse(slug, r["id"], vision_model=vision_model)["reference"])
         except (StudioError, providers.ProviderError) as e:
             failed.append({"reference": r["id"], "error": str(e)})
     return {"analysed": done, "failed": failed}

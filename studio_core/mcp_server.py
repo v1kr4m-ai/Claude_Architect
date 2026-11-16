@@ -24,6 +24,12 @@ def route_task(task: str) -> dict:
 
 
 @mcp.tool()
+def list_models() -> dict:
+    """Every task, the models able to do it, the pinned choice and the automatic pick."""
+    return router.overview()
+
+
+@mcp.tool()
 def list_projects() -> list[dict]:
     """List all projects."""
     return projects.list_projects()
@@ -49,9 +55,11 @@ def import_reference(project: str, path: str, note: str = "") -> dict:
 
 
 @mcp.tool()
-def analyse_references(project: str, reference: str = "", force: bool = False) -> dict:
-    """Run the local vision model on one reference id, or on all unanalysed images if empty."""
-    return vision.analyse(project, reference) if reference else vision.analyse_all(project, force)
+def analyse_references(project: str, reference: str = "", force: bool = False, model: str = "") -> dict:
+    """Run the vision model on one reference id, or on all unanalysed images if empty.
+    model: optional model id for this run (see list_models), else the pinned/automatic choice."""
+    m = model or None
+    return vision.analyse(project, reference, vision_model=m) if reference else vision.analyse_all(project, force, vision_model=m)
 
 
 @mcp.tool()
@@ -61,10 +69,10 @@ def propose_decision(project: str, title: str, detail: str = "", author: str = "
 
 
 @mcp.tool()
-def propose_brief(project: str, requirements: str) -> dict:
+def propose_brief(project: str, requirements: str, model: str = "") -> dict:
     """Draft a design brief proposal (rooms, areas, adjacencies, concepts) from requirements text.
     Produces proposals/P###; does not change the brief. Only the user can approve it."""
-    rec = brief.propose(project, requirements)
+    rec = brief.propose(project, requirements, reasoning_model=model or None)
     return {"id": rec["id"], "summary": rec["proposal"]["summary"], "warnings": rec["warnings"],
             "areas": rec["areas"], "file": f"proposals/{rec['id']}.md"}
 

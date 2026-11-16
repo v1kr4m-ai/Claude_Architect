@@ -199,6 +199,31 @@ class Router(unittest.TestCase):
         self.assertEqual(len(c["rejected"]), 2)  # anthropic + the ollama "-cloud" proxy model
         self.assertEqual(self.pick("reasoning", 7900, cloud=True)["model"].id, "anthropic/claude-opus-5-5")
 
+    def test_override_and_pinned_choice(self):
+        c = self.pick_with(override="ollama/llava:latest")
+        self.assertEqual((c["model"].name, c["reason"].split("; ")[1]), ("llava:latest", "chosen for this run"))
+        for bad in ("ollama/nope:1", "ollama/qwen2.5:7b", "ollama/gemma4:31b-cloud"):  # missing, no vision, cloud
+            with self.assertRaises(ProviderError):
+                self.pick_with(override=bad)
+        orig = router.CHOICES
+        router.CHOICES = Path(_TMP.name) / "choices.yaml"
+        try:
+            router.set_choice("vision", "ollama/llava:latest", self.models)
+            self.assertEqual(self.pick_with()["reason"].split("; ")[1], "pinned by user")
+            with self.assertRaises(ProviderError):
+                router.set_choice("vision", "ollama/qwen2.5:7b", self.models)   # not saved if invalid
+            self.assertEqual(router.choices(), {"vision": "ollama/llava:latest"})
+            ov = router.overview(self.models)
+            self.assertEqual(ov["vision"]["in_use"], "ollama/llava:latest")
+            self.assertEqual(ov["vision"]["automatic"], "ollama/llama3.2-vision:latest")
+            router.set_choice("vision", None)
+            self.assertEqual(router.choices(), {})
+        finally:
+            router.CHOICES = orig
+
+    def pick_with(self, override=None):
+        return router.pick("vision", self.models, config.load(), 7900, override=override)
+
     def test_capability_required(self):
         self.assertNotIn("vision", self.pick("json", 7900)["model"].capabilities - {"completion", "json", "tools"})
         with self.assertRaises(ProviderError):

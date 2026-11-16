@@ -33,6 +33,7 @@ class NewReference(BaseModel):
 class Analyse(BaseModel):
     reference: str | None = None  # None = every unanalysed image
     force: bool = False
+    model: str | None = None      # vision model for this run
 
 
 class Decision(BaseModel):
@@ -74,6 +75,20 @@ def route(task: str):
     return {"model": c["model"].to_dict(), "reason": c["reason"], "rejected": c["rejected"]}
 
 
+class ModelChoice(BaseModel):
+    model: str | None = None  # None = automatic
+
+
+@app.get("/models")
+def models():
+    return router.overview()
+
+
+@app.put("/models/{task}")
+def choose_model(task: str, req: ModelChoice):
+    return router.set_choice(task, req.model)
+
+
 @app.get("/projects")
 def list_projects():
     return {"projects": projects.list_projects()}
@@ -98,8 +113,8 @@ def add_reference(slug: str, req: NewReference):
 def analyse(slug: str, req: Analyse):
     # sync def: FastAPI runs it in a worker thread, so a slow local model does not block /health
     if req.reference:
-        return vision.analyse(slug, req.reference)
-    return vision.analyse_all(slug, req.force)
+        return vision.analyse(slug, req.reference, vision_model=req.model)
+    return vision.analyse_all(slug, req.force, vision_model=req.model)
 
 
 @app.post("/projects/{slug}/decisions", status_code=201)
@@ -109,6 +124,7 @@ def add_decision(slug: str, req: Decision):
 
 class Requirements(BaseModel):
     text: str
+    model: str | None = None  # reasoning model for this run
 
 
 class Approve(BaseModel):
@@ -125,7 +141,7 @@ class DecisionStatus(BaseModel):
 
 @app.post("/projects/{slug}/proposals", status_code=201)
 def propose(slug: str, req: Requirements):
-    return brief.propose(slug, req.text)
+    return brief.propose(slug, req.text, reasoning_model=req.model)
 
 
 @app.get("/projects/{slug}/proposals")

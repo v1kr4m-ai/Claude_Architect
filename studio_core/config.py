@@ -1,4 +1,5 @@
 """Configuration: built-in defaults <- config/studio.yaml <- environment variables."""
+import copy
 import os
 from pathlib import Path
 
@@ -40,7 +41,8 @@ def _merge(base: dict, over: dict) -> dict:
 
 def load() -> dict:
     path = Path(os.getenv("STUDIO_CONFIG", ROOT / "config" / "studio.yaml"))
-    cfg = _merge(DEFAULTS, yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {})
+    # deepcopy: callers may mutate their config; DEFAULTS must never change
+    cfg = _merge(copy.deepcopy(DEFAULTS), yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {})
     for env, (section, key) in {
         "STUDIO_PROJECTS_ROOT": ("paths", "projects_root"),
         "BLENDER_EXE": ("blender", "executable"),
