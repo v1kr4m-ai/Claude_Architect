@@ -11,7 +11,13 @@ DEFAULTS = {
     "api": {"host": "127.0.0.1", "port": 8777},
     "paths": {"projects_root": str(ROOT / "projects")},
     "blender": {"executable": "", "timeout_seconds": 1800},
-    "comfyui": {"base_url": "http://127.0.0.1:8188", "timeout_seconds": 900},
+    "comfyui": {"base_url": "http://127.0.0.1:8188", "timeout_seconds": 900,
+                # img2img over a Blender render, held to geometry by a line ControlNet (see comfy.py)
+                "enhance": {"checkpoint": "juggernautXL_ragnarokBy.safetensors",
+                            "controlnet": "SDXL\\mistoLine_fp16.safetensors",
+                            "steps": 24, "cfg": 5.5, "sampler": "dpmpp_2m", "scheduler": "karras",
+                            "denoise": 0.45, "control_strength": 1.0, "control_end": 1.0,  # 0.6/0.85 let the AI add a hip roof (live)
+                            "min_edge_recall": 0.6, "max_unexplained_share": 0.1}},
     "ollama": {"base_url": "http://127.0.0.1:11434", "timeout_seconds": 600, "num_ctx": 8192, "num_predict": 1200},
     # Cloud use is opt-in. Ollama "*-cloud" models count as cloud: they proxy to ollama.com.
     "privacy": {"allow_cloud": False},

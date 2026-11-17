@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import brief, imports, ingest, layout, model3d, projects, providers, router, status, vision
+from . import brief, imports, ingest, layout, model3d, projects, providers, router, status, vision, visualize
 
 app = FastAPI(title="Architectural Studio Core", version="0.6.0")
 
@@ -54,7 +54,7 @@ def project_file(slug: str, path: str):
     pdir = projects.project_dir(slug).resolve()
     target = (pdir / path).resolve()
     allowed = (pdir / "references" / "thumbnails", pdir / "analysis", pdir / "references" / "originals",
-               pdir / "plans", pdir / "renders", pdir / "output")  # drawings, renders, GLB deliverables
+               pdir / "plans", pdir / "renders", pdir / "output", pdir / "videos")  # drawings, renders, GLB deliverables
     if not (any(target.is_relative_to(a) for a in allowed) and target.is_file()):
         raise HTTPException(404, "File not found")
     return FileResponse(target)
@@ -217,6 +217,24 @@ def draw_plan(slug: str):
 @app.post("/projects/{slug}/model/build")
 def build_model(slug: str):
     return model3d.build(slug)
+
+
+class RenderJob(BaseModel):
+    preset: str = "day"
+    views: list[str] | None = None
+    interiors: int = 2
+    engine: str = "cycles"
+    samples: int = 64
+    width: int = 1280
+    height: int = 720
+    enhance: bool = False
+    video: str | None = None
+    video_frames: int = 144
+
+
+@app.post("/projects/{slug}/render")
+def render(slug: str, req: RenderJob):
+    return visualize.render(slug, **req.model_dump())
 
 
 @app.post("/projects/{slug}/validate")

@@ -9,7 +9,7 @@ import time
 import urllib.request
 import webbrowser
 
-from . import brief, config, imports, ingest, layout, model3d, projects, providers, router, status, vision
+from . import brief, config, imports, ingest, layout, model3d, projects, providers, router, status, vision, visualize
 
 
 def _exit_with_parent() -> None:
@@ -71,6 +71,15 @@ def main(argv=None) -> int:
     s.add_argument("project")
     s = sub.add_parser("draw", help="draw the approved model as SVG/PDF plan sheets + area schedule")
     s.add_argument("project")
+    s = sub.add_parser("render", help="render the built model: stills, line passes, optional AI enhancement and video")
+    s.add_argument("project"); s.add_argument("--preset", default="day", choices=visualize.PRESETS)
+    s.add_argument("--views", nargs="*", choices=visualize.VIEWS, help="exterior views (default: all three)")
+    s.add_argument("--interiors", type=int, default=2, help="how many of the largest rooms to render inside")
+    s.add_argument("--engine", default="cycles", choices=["cycles", "eevee"]); s.add_argument("--samples", type=int, default=64)
+    s.add_argument("--width", type=int, default=1280); s.add_argument("--height", type=int, default=720)
+    s.add_argument("--enhance", action="store_true", help="also make ComfyUI-enhanced versions (geometry-checked)")
+    s.add_argument("--video", choices=["orbit", "path"], help="also render a walkthrough video")
+    s.add_argument("--video-frames", type=int, default=144)
     s = sub.add_parser("build-model", help="build the approved model in Blender: .blend, GLB, preview + consistency checks")
     s.add_argument("project")
     s = sub.add_parser("approve-import", help="adopt an import into model_spec.json (user action)")
@@ -139,6 +148,9 @@ def main(argv=None) -> int:
             out = {k: rec[k] for k in ("id", "status", "summary", "warnings", "notes", "previews")}
         elif a.cmd == "draw":
             out = layout.draw(a.project)
+        elif a.cmd == "render":
+            out = visualize.render(a.project, a.preset, a.views, a.interiors, a.engine, a.samples, a.width, a.height,
+                                   a.enhance, a.video, a.video_frames)
         elif a.cmd == "build-model":
             out = model3d.build(a.project)
         elif a.cmd == "imports":
